@@ -27,6 +27,10 @@ export function setSessionToken(token: string): void {
   localStorage.setItem(SESSION_TOKEN_KEY, token)
 }
 
+export function clearSessionToken(): void {
+  localStorage.removeItem(SESSION_TOKEN_KEY)
+}
+
 export function playerTokenKey(roomCode: string): string {
   return `chips_player_token_${roomCode.toUpperCase()}`
 }
@@ -41,9 +45,11 @@ export function setPlayerToken(roomCode: string, token: string): void {
 
 class ApiError extends Error {
   code?: string
-  constructor(message: string, code?: string) {
+  status?: number
+  constructor(message: string, code?: string, status?: number) {
     super(message)
     this.code = code
+    this.status = status
   }
 }
 
@@ -60,7 +66,14 @@ async function request(path: string, body?: unknown, auth = true): Promise<any> 
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    throw new ApiError(data.message || data.detail || 'Request failed', data.code)
+    // Session tokens live only in the backend's process memory (see
+    // README's "in-memory only" limitation) -- any backend restart
+    // silently invalidates every outstanding token. Without this, a
+    // stale token in localStorage would permanently skip the passphrase
+    // gate while every real request kept failing with no way to recover
+    // short of manually clearing storage.
+    if (res.status === 401) clearSessionToken()
+    throw new ApiError(data.message || data.detail || 'Request failed', data.code, res.status)
   }
   return data
 }

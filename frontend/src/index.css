@@ -1,11 +1,13 @@
 :root {
   color-scheme: dark;
-  --bg: #121417;
-  --surface: #1c2027;
-  --surface-2: #262c35;
-  --text: #f0f1f3;
-  --text-dim: #9aa2af;
-  --accent: #3b82f6;
+  --bg: #0d1a15;
+  --surface: #14251e;
+  --surface-2: #1d3329;
+  --border: #2a4639;
+  --text: #ecfbf3;
+  --text-dim: #8fb8a3;
+  --accent: #2dd4a7;
+  --accent-contrast: #052e22;
   --good: #22c55e;
   --bad: #ef4444;
   --warn: #eab308;
@@ -32,6 +34,12 @@ button {
 
 input, select {
   font: inherit;
+  accent-color: var(--accent);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .screen {
@@ -67,7 +75,7 @@ h1, h2, h3 { margin: 0 0 0.5rem 0; }
 .field input, .field select {
   padding: 0.6rem;
   border-radius: 8px;
-  border: 1px solid #39404b;
+  border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text);
 }
@@ -86,7 +94,7 @@ h1, h2, h3 { margin: 0 0 0.5rem 0; }
   cursor: not-allowed;
 }
 
-.btn-primary { background: var(--accent); color: white; }
+.btn-primary { background: var(--accent); color: var(--accent-contrast); }
 .btn-fold { background: var(--bad); color: white; }
 .btn-check-call { background: var(--good); color: white; }
 .btn-raise { background: var(--warn); color: #231a00; }
@@ -125,7 +133,7 @@ h1, h2, h3 { margin: 0 0 0.5rem 0; }
   font-size: 0.7rem;
   padding: 0.1rem 0.4rem;
   border-radius: 999px;
-  background: #39404b;
+  background: var(--border);
   margin-left: 0.4rem;
 }
 

@@ -41,16 +41,25 @@ Two real differences from the LAN quick-start mode:
 
 1. **Split origins.** The frontend (GitHub Pages) and backend (your own
    domain) are different origins, so the backend needs CORS -- handled at
-   the nginx layer (`deploy/nginx-chips.conf`), not in the app itself. The
-   app stays exactly as simple as the LAN mode; nginx owns every
-   cross-cutting public-deployment concern.
+   the nginx layer (`deploy/nginx-chips.conf`), not in the app itself.
+   This is the one thing that's genuinely nginx-only; rate limiting (next
+   point) isn't.
 2. **The passphrase is now internet-brute-forceable.** On your own WiFi,
    an attacker needs to already be on your network. Reachable from the
-   whole internet, that's no longer true -- `deploy/nginx-chips.conf`
-   rate-limits `/api/auth/passphrase` specifically (far tighter than every
-   other route), and **you should pick a real, non-trivial passphrase**
-   (not the `pokernight` default) before going live. `scripts/run-prod.sh`
-   refuses to start without `CHIPS_PASSPHRASE` set, specifically to catch
+   whole internet, that's no longer true. Rate limiting on
+   `/api/auth/passphrase` exists at *two* independent layers: nginx
+   (`deploy/nginx-chips.conf`, ~6 attempts/min/IP) in this public mode,
+   and the app itself (`backend/app/rate_limit.py`, 10 attempts/min/IP) in
+   *every* mode, including the plain LAN quick-start -- the app-level one
+   exists specifically so the LAN mode, which has no nginx in front of it
+   at all, isn't left with zero brute-force protection. The app also
+   coarsely rate-limits room create/join/rejoin and new WebSocket
+   connection attempts (not in-game message traffic) against simple
+   request-flood abuse, independent of nginx. **You should still pick a
+   real, non-trivial passphrase** (not the `pokernight` default) before
+   going live -- rate limiting slows brute force, it doesn't make a weak
+   passphrase safe. `scripts/run-prod.sh` refuses to start without
+   `CHIPS_PASSPHRASE` set, specifically to catch
    this.
 
 Everything else -- the in-memory-only game state, the trust-based

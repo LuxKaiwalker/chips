@@ -6,14 +6,26 @@ from app.auth import is_valid_session_token
 from app.engine import EngineError
 from app.engine.state_machine import advance_runout, apply_action, declare_winners, rebuy, start_new_hand
 from app.models import PlayerStatus
+from app.rate_limit import FixedWindowLimiter, client_ip
 from app.rooms import room_manager
 from app.ws_manager import connection_manager
 
 router = APIRouter()
 
+# Guards against a flood of new connection *attempts* (each one costs this
+# single-process server a full accept() + state broadcast) -- not ordinary
+# in-game message traffic over an already-established connection, which
+# isn't rate-limited at all here (a poker hand's natural action rate is
+# nowhere near a DoS concern).
+_ws_connect_limiter = FixedWindowLimiter(max_hits=30, window_seconds=10)
+
 
 @router.websocket("/ws/{room_code}")
 async def room_socket(ws: WebSocket, room_code: str, session_token: str = "", player_token: str = ""):
+    if not _ws_connect_limiter.allow(client_ip(ws)):
+        await ws.close(code=4429)
+        return
+
     if not is_valid_session_token(session_token):
         await ws.close(code=4401)
         return

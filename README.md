@@ -77,7 +77,15 @@ Covers button/blind rotation (including heads-up rules), legal-action and
 min-raise validation (including the short-all-in-doesn't-reopen-betting
 rule), the main/side-pot split algorithm, fold-out auto-award, split-pot
 odd-chip distribution, room creation/join/rejoin, host-only config/seat-
-removal gating, and the stale-room cleanup sweep.
+removal gating, the stale-room cleanup sweep, and the rate limiter.
+
+The app also rate-limits itself (`backend/app/rate_limit.py`) regardless
+of deployment mode: the passphrase endpoint specifically (the one
+brute-forceable secret in this app), plus a coarser general limit on room
+create/join/rejoin and new WebSocket connection attempts against simple
+request-flood abuse. This is independent of the extra, tighter rate
+limiting the public-deployment mode's nginx config adds on top — see
+[`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 ## How a game works
 

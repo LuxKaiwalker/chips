@@ -29,7 +29,11 @@ function App() {
           return
         }
       }
-      setStage('home')
+      // rejoinRoom (via request()) clears the stored session token itself
+      // if the attempt above failed with 401 -- re-check rather than
+      // assuming 'home' is still correct, or a stale token would silently
+      // skip the passphrase gate forever after any backend restart.
+      setStage(getSessionToken() ? 'home' : 'gate')
     }
     boot()
   }, [])
@@ -54,6 +58,7 @@ function App() {
             }
           })
         }}
+        onUnauthorized={() => setStage('gate')}
       />
     )
   }

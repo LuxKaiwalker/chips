@@ -1,4 +1,11 @@
-import { API_BASE, getPlayerToken, getSessionToken } from './http'
+import { API_BASE, clearLastRoomCode, clearSessionToken, getPlayerToken, getSessionToken } from './http'
+
+// Matches ws_router.py's close codes: 4401 = invalid/expired session
+// token, 4404 = room or player not found (e.g. a stale room after a
+// backend restart, which wipes all in-memory rooms). Neither is worth
+// retrying with the same credentials -- see the onclose handler below.
+const CLOSE_INVALID_SESSION = 4401
+const CLOSE_ROOM_NOT_FOUND = 4404
 import type { RoomState } from '../types'
 
 export type WsEvent =
@@ -53,9 +60,29 @@ export class RoomSocket {
       this.onEvent(data)
     }
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.onConnectionChange(false)
       if (this.heartbeat) window.clearInterval(this.heartbeat)
+
+      if (ev.code === CLOSE_INVALID_SESSION) {
+        // Retrying would just fail the same way forever -- the session
+        // token is gone (backend restarted; session store is in-memory
+        // only). Clear it and reload so App.tsx's boot logic lands back
+        // on the passphrase gate instead of a silently-stuck "Connecting…"
+        // screen.
+        clearSessionToken()
+        clearLastRoomCode()
+        window.location.reload()
+        return
+      }
+      if (ev.code === CLOSE_ROOM_NOT_FOUND) {
+        // The room itself (or this player's seat) is gone -- same backend
+        // restart story, but the session may still be valid. Drop back to
+        // Home instead of retrying a room that no longer exists.
+        clearLastRoomCode()
+        window.location.reload()
+        return
+      }
       if (!this.closedByUser) {
         window.setTimeout(() => this.connect(), this.reconnectDelay)
         this.reconnectDelay = Math.min(this.reconnectDelay * 1.5, 10000)
