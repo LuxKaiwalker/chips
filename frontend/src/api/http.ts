@@ -1,3 +1,9 @@
+// Same-origin by default (the LAN quick-start mode where this backend also
+// serves the built frontend). Set at build time when the frontend is
+// published separately (e.g. GitHub Pages) from a backend on its own
+// domain -- see DEPLOYMENT.md.
+export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
+
 const SESSION_TOKEN_KEY = 'chips_session_token'
 const LAST_ROOM_KEY = 'chips_last_room_code'
 
@@ -47,7 +53,7 @@ async function request(path: string, body?: unknown, auth = true): Promise<any> 
     const token = getSessionToken()
     if (token) headers['X-Session-Token'] = token
   }
-  const res = await fetch(`/api${path}`, {
+  const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body ?? {}),

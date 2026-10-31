@@ -1,0 +1,26 @@
+# Portable systemd unit template for running the Chips backend persistently
+# behind nginx + Cloudflare Tunnel -- see DEPLOYMENT.md.
+#
+# Install: copy to /etc/systemd/system/chips-backend.service, fill in
+# WorkingDirectory and CHIPS_PASSPHRASE below, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now chips-backend
+#
+# On NixOS, prefer a systemd.services.chips-backend block in
+# configuration.nix instead of installing this file directly -- it's kept
+# here as a portable reference for any other systemd-based Linux.
+
+[Unit]
+Description=Chips backend (poker chip/pot tracker)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/REPLACE/WITH/PATH/TO/chips
+Environment=CHIPS_PASSPHRASE=REPLACE_WITH_A_REAL_PASSPHRASE
+ExecStart=/REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

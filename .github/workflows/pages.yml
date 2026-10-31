@@ -1,0 +1,67 @@
+name: Publish frontend to GitHub Pages
+
+# Builds the frontend and publishes it via GitHub's own Pages deployment
+# action -- see DEPLOYMENT.md "Publishing the frontend to GitHub Pages".
+# Requires the repo's Settings -> Pages -> Source to be set to
+# "GitHub Actions" (one-time, manual -- this workflow can't flip that
+# setting itself), and a repository variable CHIPS_API_URL set to your
+# backend's public origin (Settings -> Secrets and variables -> Actions ->
+# Variables), e.g. https://your-chips-api.example.com -- no trailing slash.
+#
+# Only this frontend gets published here; the backend is deployed
+# separately (nginx + Cloudflare Tunnel, run as a systemd service) per
+# DEPLOYMENT.md -- this workflow has nothing to do with that half.
+#
+# Triggers only on changes to the frontend itself, not every push to main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - working-directory: frontend
+        run: npm ci
+      - working-directory: frontend
+        # VITE_BASE_PATH=/chips/ matches this repo's default GitHub Pages
+        # project-site URL (https://<user>.github.io/chips/). If you set up
+        # a custom domain instead (a CNAME file in frontend/public/), change
+        # this to VITE_BASE_PATH=/ -- see DEPLOYMENT.md.
+        run: npm run build
+        env:
+          VITE_API_BASE: ${{ vars.CHIPS_API_URL }}
+          VITE_BASE_PATH: /chips/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,28 @@
+# cloudflared ingress config -- see DEPLOYMENT.md "nginx + Cloudflare
+# Tunnel" for the full setup walkthrough.
+#
+# Portable reference config. Copy to wherever cloudflared expects it
+# (conventionally /etc/cloudflared/config.yml), or adapt into a NixOS
+# services.cloudflared module's tunnels.<id>.ingress attrset.
+#
+# Routes the public hostname to nginx (127.0.0.1:8080), NOT directly to the
+# FastAPI backend (127.0.0.1:8000) -- nginx is what does CORS, rate
+# limiting, and the WebSocket upgrade handling; skipping it here would
+# bypass all of that.
+#
+# <TUNNEL_ID>, the credentials-file path, and the hostname below are all
+# placeholders -- `cloudflared tunnel create <name>` prints the real
+# tunnel ID and credentials-file path to fill in, and the hostname should
+# be your own backend hostname (see DEPLOYMENT.md for why it should be a
+# *sibling* subdomain of your frontend's, not a child of it). Keep your
+# real, filled-in copy untracked -- see DEPLOYMENT.md's "Keeping your
+# real deploy config" for the convention this repo uses for that.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  - hostname: your-chips-api.example.com
+    service: http://127.0.0.1:8080
+  # Required catch-all -- cloudflared refuses to start without one.
+  - service: http_status:404

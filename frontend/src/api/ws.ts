@@ -1,4 +1,4 @@
-import { getPlayerToken, getSessionToken } from './http'
+import { API_BASE, getPlayerToken, getSessionToken } from './http'
 import type { RoomState } from '../types'
 
 export type WsEvent =
@@ -25,8 +25,16 @@ export class RoomSocket {
     this.closedByUser = false
     const sessionToken = getSessionToken()
     const playerToken = getPlayerToken(this.roomCode)
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const url = `${protocol}://${window.location.host}/ws/${this.roomCode}?session_token=${encodeURIComponent(
+    // Same-origin by default; when API_BASE points at a separately-hosted
+    // backend (see DEPLOYMENT.md), derive the ws(s) origin from it instead.
+    let wsOrigin: string
+    if (API_BASE) {
+      const base = new URL(API_BASE)
+      wsOrigin = `${base.protocol === 'https:' ? 'wss' : 'ws'}://${base.host}`
+    } else {
+      wsOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+    }
+    const url = `${wsOrigin}/ws/${this.roomCode}?session_token=${encodeURIComponent(
       sessionToken ?? '',
     )}&player_token=${encodeURIComponent(playerToken ?? '')}`
     const ws = new WebSocket(url)

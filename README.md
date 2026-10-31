@@ -38,6 +38,15 @@ restarts (crash, `Ctrl-C`, machine reboot), every room and every stack is
 gone. This is a deliberate simplicity trade-off for a local party app, not
 something to work around — just don't restart the server mid-game.
 
+## Public deployment (optional)
+
+The quick start above is everything you need for a normal game night. If
+you specifically want the app reachable by a stable public URL instead of
+a LAN IP (useful when a guest WiFi's client isolation blocks phones from
+reaching each other directly), see [`DEPLOYMENT.md`](DEPLOYMENT.md) for the
+nginx + Cloudflare Tunnel + GitHub Pages setup. Players are still expected
+to be physically at the table with a real deck either way.
+
 ## Development
 
 Two terminals, with hot reload on both sides:
