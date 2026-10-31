@@ -4,16 +4,18 @@ import { ApiError, createRoom, joinRoom } from '../api/http'
 export function Home({
   onEnterRoom,
   onUnauthorized,
+  initialJoinCode,
 }: {
   onEnterRoom: (code: string) => void
   onUnauthorized: () => void
+  initialJoinCode?: string | null
 }) {
-  const [mode, setMode] = useState<'create' | 'join'>('create')
+  const [mode, setMode] = useState<'create' | 'join'>(initialJoinCode ? 'join' : 'create')
   const [displayName, setDisplayName] = useState('')
   const [smallBlind, setSmallBlind] = useState(1)
   const [bigBlind, setBigBlind] = useState(2)
   const [startingStack, setStartingStack] = useState(200)
-  const [joinCode, setJoinCode] = useState('')
+  const [joinCode, setJoinCode] = useState(initialJoinCode ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -65,14 +67,14 @@ export function Home({
 
   return (
     <div className="screen">
-      <h1>🂡 Chips</h1>
+      <h1>Chips</h1>
       <div className="card">
         <div className="row" style={{ marginBottom: '1rem' }}>
           <button className={`btn ${mode === 'create' ? 'btn-primary' : ''}`} style={{ flex: 1 }} onClick={() => setMode('create')}>
-            ➕ Create
+            Create
           </button>
           <button className={`btn ${mode === 'join' ? 'btn-primary' : ''}`} style={{ flex: 1 }} onClick={() => setMode('join')}>
-            🔑 Join
+            Join
           </button>
         </div>
 
@@ -96,7 +98,7 @@ export function Home({
             </div>
             {error && <div className="error-banner">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-              ➕ Create Room
+              Create Room
             </button>
           </form>
         ) : (
@@ -119,7 +121,7 @@ export function Home({
             </div>
             {error && <div className="error-banner">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-              🔑 Join Room
+              Join Room
             </button>
           </form>
         )}

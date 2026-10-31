@@ -11,6 +11,7 @@ export interface Player {
   contrib_street: number
   contrib_hand: number
   is_button: boolean
+  sit_out_next: boolean
 }
 
 export interface Pot {
@@ -68,11 +69,11 @@ export interface RoomState {
 }
 
 export const STREET_DEAL_LABEL: Record<Street, string> = {
-  preflop: '🂠🂠 Preflop — deal 2 hole cards to each player',
-  flop: '🂠🂠🂠 Dealing the Flop',
-  turn: '🂠 Dealing the Turn',
-  river: '🂠 Dealing the River',
-  showdown: '🏆 Showdown — reveal hands',
+  preflop: 'Preflop — deal 2 hole cards to each player',
+  flop: 'Dealing the Flop',
+  turn: 'Dealing the Turn',
+  river: 'Dealing the River',
+  showdown: 'Showdown — reveal hands',
 }
 
 export const STREET_CARD_COUNT: Record<Street, number> = {

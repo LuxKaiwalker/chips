@@ -16,19 +16,17 @@ export function DealingStageBanner({
     <div className="stage-banner" key={hand.street}>
       <div className="board-slots">
         {Array.from({ length: 5 }, (_, i) => (
-          <span key={i} className={`board-slot ${i < revealed ? 'lit' : ''}`} style={{ animationDelay: `${i * 0.08}s` }}>
-            {i < revealed ? '🂡' : '🂠'}
-          </span>
+          <span key={i} className={`board-slot ${i < revealed ? 'lit' : ''}`} style={{ animationDelay: `${i * 0.08}s` }} />
         ))}
       </div>
       <div className="stage-label">{STREET_DEAL_LABEL[hand.street]}</div>
       {hand.awaiting_runout_confirmation && myStatus !== 'folded' && (
         <button className="btn btn-primary" style={{ marginTop: '0.5rem' }} onClick={onAdvance}>
-          ✅ Dealt it — continue
+          Dealt — continue
         </button>
       )}
       {hand.awaiting_runout_confirmation && myStatus === 'folded' && (
-        <p className="muted">⏳ Waiting for another player to confirm the deal…</p>
+        <p className="muted">Waiting for another player to confirm the deal…</p>
       )}
     </div>
   )

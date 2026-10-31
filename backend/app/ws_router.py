@@ -4,7 +4,14 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.auth import is_valid_session_token
 from app.engine import EngineError
-from app.engine.state_machine import advance_runout, apply_action, declare_winners, rebuy, start_new_hand
+from app.engine.state_machine import (
+    advance_runout,
+    apply_action,
+    declare_winners,
+    rebuy,
+    start_new_hand,
+    toggle_sit_out,
+)
 from app.models import PlayerStatus
 from app.rate_limit import FixedWindowLimiter, client_ip
 from app.rooms import room_manager
@@ -95,6 +102,8 @@ async def _handle_message(room, seat_id: int, msg: dict) -> None:
             declare_winners(room, seat_id, msg["assignments"])
         elif msg_type == "rebuy":
             rebuy(room, seat_id, int(msg["amount"]))
+        elif msg_type == "toggle_sit_out":
+            toggle_sit_out(room, seat_id)
         elif msg_type == "remove_stale_seat":
             room_manager.remove_stale_seat(room, seat_id, int(msg["seat_id"]))
         else:

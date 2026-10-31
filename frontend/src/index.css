@@ -156,40 +156,51 @@ h1, h2, h3 { margin: 0 0 0.5rem 0; }
   background: var(--surface-2);
   border-radius: 8px;
   font-weight: 600;
-  animation: stage-pulse 0.5s ease-out;
+  letter-spacing: 0.02em;
 }
 
-.stage-label { margin-top: 0.3rem; }
+.stage-label { margin-top: 0.4rem; font-size: 0.85rem; color: var(--text-dim); font-weight: 500; }
 
 .board-slots {
   display: flex;
   justify-content: center;
-  gap: 0.3rem;
-  font-size: 1.6rem;
-  line-height: 1;
+  gap: 0.4rem;
 }
 
 .board-slot {
-  opacity: 0.3;
-  transform: scale(0.85);
-  transition: opacity 0.2s, transform 0.2s;
+  width: 1.6rem;
+  height: 2.2rem;
+  border-radius: 3px;
+  border: 1px solid var(--text-dim);
+  background: var(--surface);
+  opacity: 0.35;
+  transition: opacity 0.3s, background-color 0.3s, border-color 0.3s;
 }
 
 .board-slot.lit {
   opacity: 1;
-  animation: card-light-up 0.5s ease-out both;
+  background: var(--accent);
+  border-color: var(--accent);
+  animation: card-reveal 0.35s ease-out;
 }
 
-@keyframes card-light-up {
-  0% { opacity: 0.3; transform: scale(0.7) rotate(-8deg); filter: drop-shadow(0 0 0 transparent); }
-  60% { opacity: 1; transform: scale(1.25) rotate(4deg); filter: drop-shadow(0 0 8px var(--accent)); }
-  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 transparent); }
+@keyframes card-reveal {
+  0% { opacity: 0.35; filter: brightness(1); }
+  50% { filter: brightness(1.4); }
+  100% { opacity: 1; filter: brightness(1); }
 }
 
-@keyframes stage-pulse {
-  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
-  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); }
+.status-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--text-dim);
+  margin-right: 0.4rem;
 }
+
+.status-dot.connected { background: var(--good); }
+.status-dot.disconnected { background: var(--bad); }
 
 .action-log {
   max-height: 150px;

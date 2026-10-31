@@ -12,6 +12,13 @@ function App() {
   const [stage, setStage] = useState<Stage>('checking')
   const [roomCode, setRoomCode] = useState<string | null>(null)
   const [mySeatId, setMySeatId] = useState<number | null>(null)
+  // A QR code / shared link can carry ?join=CODE. Parsed once; the query
+  // string is then cleared so a later refresh doesn't keep re-applying it.
+  const [deepLinkJoinCode] = useState<string | null>(() => {
+    const code = new URLSearchParams(window.location.search).get('join')
+    if (code) window.history.replaceState(null, '', window.location.pathname)
+    return code
+  })
 
   useEffect(() => {
     async function boot() {
@@ -59,6 +66,7 @@ function App() {
           })
         }}
         onUnauthorized={() => setStage('gate')}
+        initialJoinCode={deepLinkJoinCode}
       />
     )
   }
@@ -108,12 +116,12 @@ function RoomView({
     <>
       {!connected && (
         <div className="error-banner" style={{ margin: '0.5rem' }}>
-          🔄 Reconnecting…
+          Reconnecting…
         </div>
       )}
       {error && (
         <div className="error-banner" style={{ margin: '0.5rem' }}>
-          ⚠️ {error}
+          {error}
         </div>
       )}
       {room.phase === 'lobby' ? (

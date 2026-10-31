@@ -1,7 +1,7 @@
 import pytest
 
 from app.engine import EngineError
-from app.engine.state_machine import advance_runout, apply_action, declare_winners, start_new_hand
+from app.engine.state_machine import advance_runout, apply_action, declare_winners, start_new_hand, toggle_sit_out
 from app.models import PlayerStatus, RoomPhase, Street
 from tests.helpers import make_room
 
@@ -144,6 +144,37 @@ def test_side_pots_three_way_allin():
     ])
     assert room.phase == RoomPhase.BETWEEN_HANDS
     assert room.players[3].stack == 100 - 50 + 120  # started 100, put in 50, won both pots (120)
+
+
+def test_sit_out_excludes_from_next_hand_but_not_current_one():
+    room = make_room({1: 100, 2: 100, 3: 100})
+    start_new_hand(room)
+    # seat 2 requests to sit out mid-hand -- must NOT disturb the hand in progress
+    toggle_sit_out(room, 2)
+    assert room.players[2].sit_out_next is True
+    assert room.players[2].status == PlayerStatus.ACTIVE  # unchanged mid-hand
+
+    # finish the hand normally (everyone checks/calls through)
+    apply_action(room, 1, "call")
+    apply_action(room, 2, "call")
+    apply_action(room, 3, "check")
+    check_through_to_showdown(room)
+    declare_winners(room, 1, [{"pot_index": 0, "winner_seats": [1]}])
+
+    # next hand: seat 2 should be sitting out, not dealt in
+    start_new_hand(room)
+    assert room.players[2].status == PlayerStatus.SITTING_OUT
+    assert 2 not in room.hand.dealt_in_seats
+
+    # toggling back takes effect on the hand after that
+    toggle_sit_out(room, 2)
+    assert room.players[2].sit_out_next is False
+    # finish this hand (2-way, seats 1 and 3) and start the next
+    while room.phase == RoomPhase.IN_HAND:
+        apply_action(room, room.hand.to_act_seat, "fold")
+    start_new_hand(room)
+    assert room.players[2].status == PlayerStatus.ACTIVE
+    assert 2 in room.hand.dealt_in_seats
 
 
 def test_fold_out_auto_awards_without_showdown():

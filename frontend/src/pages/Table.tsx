@@ -25,9 +25,9 @@ export function Table({
     <div className="screen">
       <div className="card center-text">
         <span className="muted">
-          🔑 {room.code} · 🎯 {room.config.small_blind}/{room.config.big_blind}
+          Room {room.code} · Blinds {room.config.small_blind}/{room.config.big_blind}
         </span>
-        {hand && <h3>🃏 Hand #{hand.hand_number}</h3>}
+        {hand && <h3>Hand #{hand.hand_number}</h3>}
       </div>
 
       {hand && <DealingStageBanner hand={hand} myStatus={me?.status ?? ''} onAdvance={() => send({ type: 'advance_runout' })} />}
@@ -55,7 +55,7 @@ export function Table({
         <div className="card">
           {hand?.last_result && (
             <p className="muted">
-              {hand.last_result.reason === 'fold_out' ? '🏳️ Everyone folded — ' : '🏆 Showdown — '}
+              {hand.last_result.reason === 'fold_out' ? 'Everyone folded — ' : 'Showdown — '}
               pot awarded.
             </p>
           )}
@@ -63,10 +63,10 @@ export function Table({
             <RebuyModal config={room.config} send={send} />
           ) : isHost ? (
             <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => send({ type: 'start_hand' })}>
-              ▶️ Start Next Hand
+              Start Next Hand
             </button>
           ) : (
-            <p className="muted center-text">⏳ Waiting for the host (👑) to start the next hand…</p>
+            <p className="muted center-text">Waiting for the host to start the next hand…</p>
           )}
         </div>
       )}
@@ -79,9 +79,16 @@ export function Table({
 
       {isHost && <HostAdminPanel room={room} send={send} />}
 
-      <button className="link-btn" onClick={onLeave} style={{ alignSelf: 'center' }}>
-        🚪 Leave Room
-      </button>
+      <div className="row" style={{ justifyContent: 'center', gap: '1.5rem' }}>
+        {me && (
+          <button className="link-btn" onClick={() => send({ type: 'toggle_sit_out' })}>
+            {me.sit_out_next ? 'Sit Back In' : 'Sit Out Next Hand'}
+          </button>
+        )}
+        <button className="link-btn" onClick={onLeave}>
+          Leave Room
+        </button>
+      </div>
     </div>
   )
 }
@@ -89,7 +96,7 @@ export function Table({
 function ActionLog({ log }: { log: string[] }) {
   return (
     <div className="card">
-      <h3>📜 Recent Action</h3>
+      <h3>Recent Action</h3>
       <div className="action-log">
         {[...log].reverse().map((line, i) => (
           <div key={i} className="muted">
@@ -106,12 +113,12 @@ function HostAdminPanel({ room, send }: { room: RoomState; send: (payload: Recor
   if (staleSeats.length === 0 || room.phase === 'in_hand') return null
   return (
     <div className="card">
-      <h3>👑 Host: remove a seat</h3>
+      <h3>Host: Remove a Seat</h3>
       <p className="muted">Only works for seats disconnected long enough, and only between hands.</p>
       <div className="row wrap">
         {staleSeats.map((p) => (
           <button key={p.seat_id} className="btn" onClick={() => send({ type: 'remove_stale_seat', seat_id: p.seat_id })}>
-            ❌ {p.display_name}
+            Remove {p.display_name}
           </button>
         ))}
       </div>

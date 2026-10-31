@@ -23,7 +23,7 @@ export function PassphraseGate({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="screen">
       <div className="card" style={{ marginTop: '3rem' }}>
-        <h1>🂡 Chips</h1>
+        <h1>Chips</h1>
         <p className="muted">Enter tonight's passphrase to join the table.</p>
         <form onSubmit={submit}>
           <div className="field">

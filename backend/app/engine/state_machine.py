@@ -44,10 +44,12 @@ def start_new_hand(room: Room) -> None:
         raise EngineError("HAND_IN_PROGRESS", "A hand is already in progress")
 
     for p in room.players.values():
-        if p.stack > 0:
-            p.status = PlayerStatus.ACTIVE
-        else:
+        if p.stack <= 0:
             p.status = PlayerStatus.BUSTED
+        elif p.sit_out_next:
+            p.status = PlayerStatus.SITTING_OUT
+        else:
+            p.status = PlayerStatus.ACTIVE
         p.contrib_street = 0
         p.contrib_hand = 0
         p.is_button = False
@@ -364,4 +366,13 @@ def rebuy(room: Room, seat_id: int, amount: int) -> None:
         raise EngineError("ILLEGAL_ACTION", "Can only rebuy between hands")
     player.stack = amount
     player.status = PlayerStatus.SITTING_OUT
+    player.sit_out_next = False  # rebuying implies wanting back in
+    room.touch()
+
+
+def toggle_sit_out(room: Room, seat_id: int) -> None:
+    """Self-service, takes effect at the next hand -- never touches the
+    player's status mid-hand (see Player.sit_out_next's docstring)."""
+    player = room.players[seat_id]
+    player.sit_out_next = not player.sit_out_next
     room.touch()

@@ -41,7 +41,7 @@ export function ActionPanel({
               </button>
             ))}
             <button className="btn" onClick={() => setAmount(max)}>
-              🔥 All-in
+              All-in
             </button>
           </div>
           <div className="slider-row">
@@ -52,38 +52,35 @@ export function ActionPanel({
               value={amount}
               onChange={(e) => setAmount(Number(e.target.value))}
             />
-            <span className="amount-display">🪙{amount}</span>
+            <span className="amount-display">{amount}</span>
           </div>
           <button
             className="btn btn-raise"
             style={{ width: '100%', marginTop: '0.5rem' }}
-            onClick={() => {
-              if (amount >= max && !window.confirm(`Go all-in for ${amount}?`)) return
-              send({ type: 'player_action', action: legal.action_label, amount })
-            }}
+            onClick={() => send({ type: 'player_action', action: legal.action_label, amount })}
           >
-            {legal.action_label === 'bet' ? '⬆️ Bet' : '⬆️ Raise to'} 🪙{amount}
+            {legal.action_label === 'bet' ? 'Bet' : 'Raise to'} {amount}
           </button>
         </div>
       )}
 
       <div className="action-buttons">
         <button className="btn btn-fold" onClick={() => send({ type: 'player_action', action: 'fold' })}>
-          🚫 Fold
+          Fold
         </button>
         {legal.can_check && (
           <button className="btn btn-check-call" onClick={() => send({ type: 'player_action', action: 'check' })}>
-            ✓ Check
+            Check
           </button>
         )}
         {legal.can_call && (
           <button className="btn btn-check-call" onClick={() => send({ type: 'player_action', action: 'call' })}>
-            ✓ Call 🪙{legal.call_amount}
+            Call {legal.call_amount}
           </button>
         )}
         {legal.can_bet_or_raise && (
           <button className="btn btn-raise" onClick={() => setShowRaise((v) => !v)}>
-            {legal.action_label === 'bet' ? '⬆️ Bet' : '⬆️ Raise'}
+            {legal.action_label === 'bet' ? 'Bet' : 'Raise'}
           </button>
         )}
       </div>

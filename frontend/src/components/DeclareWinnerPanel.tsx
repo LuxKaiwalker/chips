@@ -46,25 +46,25 @@ export function DeclareWinnerPanel({
   if (!isHost) {
     return (
       <div className="card">
-        <h3>🏆 Showdown</h3>
-        <p className="muted">⏳ Waiting for the host (👑) to declare who won.</p>
+        <h3>Showdown</h3>
+        <p className="muted">Waiting for the host to declare who won.</p>
       </div>
     )
   }
 
   return (
     <div className="card">
-      <h3>🏆 Declare the winner</h3>
+      <h3>Declare the Winner</h3>
       <p className="muted">Everyone's revealed their cards — mark who won each pot.</p>
       {hand.pots.map((pot, i) => (
         <div key={i} className="card" style={{ background: 'var(--surface)', marginTop: '0.5rem' }}>
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <strong>
-              🪙 {pot.label} — {pot.amount}
+              {pot.label} — {pot.amount}
             </strong>
             {pot.eligible_seats.length > 1 && (
               <button className="link-btn" onClick={() => toggleSplit(i)}>
-                {splitMode[i] ? '✕ cancel split' : '➗ split pot'}
+                {splitMode[i] ? 'cancel split' : 'split pot'}
               </button>
             )}
           </div>
@@ -75,7 +75,6 @@ export function DeclareWinnerPanel({
                 className={`btn ${(selections[i] ?? []).includes(seatId) ? 'btn-primary' : ''}`}
                 onClick={() => pick(i, seatId)}
               >
-                {(selections[i] ?? []).includes(seatId) ? '✅ ' : ''}
                 {nameFor(seatId)}
               </button>
             ))}
@@ -83,7 +82,7 @@ export function DeclareWinnerPanel({
         </div>
       ))}
       <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.75rem' }} disabled={!allAssigned} onClick={submit}>
-        🏆 Award Pot{hand.pots.length > 1 ? 's' : ''}
+        Award Pot{hand.pots.length > 1 ? 's' : ''}
       </button>
     </div>
   )

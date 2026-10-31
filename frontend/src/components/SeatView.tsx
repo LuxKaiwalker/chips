@@ -19,22 +19,27 @@ export function SeatView({
   return (
     <div className={classes.join(' ')}>
       <span>
-        {player.connected ? '🟢' : '🔴'} {isToAct && '⏳ '}
+        <span className={`status-dot ${player.connected ? 'connected' : 'disconnected'}`} />
         {player.display_name}
-        {player.is_button && <span className="badge button">🔘 BTN</span>}
-        {player.seat_id === hostSeatId && <span className="badge" title="Host">👑</span>}
-        {player.seat_id === mySeatId && <span className="badge">you</span>}
-        {player.status === 'all_in' && <span className="badge allin">🔥 all-in</span>}
-        {player.status === 'sitting_out' && <span className="badge">💤 sitting out</span>}
-        {player.status === 'folded' && <span className="badge">🏳️ folded</span>}
+        {player.is_button && <span className="badge button">D</span>}
+        {player.seat_id === hostSeatId && <span className="badge">HOST</span>}
+        {player.seat_id === mySeatId && <span className="badge">YOU</span>}
+        {player.status === 'all_in' && <span className="badge allin">ALL-IN</span>}
+        {player.status === 'sitting_out' && <span className="badge">SITTING OUT</span>}
+        {player.status === 'folded' && <span className="badge">FOLDED</span>}
+        {player.status !== 'sitting_out' && player.sit_out_next && (
+          <span className="badge" title="Will sit out next hand">
+            NEXT: OUT
+          </span>
+        )}
       </span>
       <span>
         {player.contrib_street > 0 && (
           <span className="muted" style={{ marginRight: '0.6rem' }}>
-            ⬆️{player.contrib_street}
+            bet {player.contrib_street}
           </span>
         )}
-        <strong>🪙{player.stack}</strong>
+        <strong>{player.stack}</strong>
       </span>
     </div>
   )

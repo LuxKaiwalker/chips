@@ -144,6 +144,7 @@ def serialize_room(room: Room) -> dict:
                 "contrib_street": p.contrib_street,
                 "contrib_hand": p.contrib_hand,
                 "is_button": p.is_button,
+                "sit_out_next": p.sit_out_next,
             }
             for p in sorted(room.players.values(), key=lambda p: p.seat_id)
         ],

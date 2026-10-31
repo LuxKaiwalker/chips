@@ -48,6 +48,11 @@ class Player:
     is_button: bool = False
     disconnected_at: float | None = None
     joined_at: float = field(default_factory=time.time)
+    # Self-requested, takes effect at the *next* start_new_hand() call --
+    # never mutated mid-hand (would corrupt to_act_order/legal-action
+    # logic for a player currently in a hand). Persists until the player
+    # explicitly requests sitting back in.
+    sit_out_next: bool = False
 
 
 @dataclass
