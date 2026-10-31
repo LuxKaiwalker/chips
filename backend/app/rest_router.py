@@ -54,6 +54,7 @@ async def create_room(
         big_blind=int(body.get("big_blind", settings.default_big_blind)),
         starting_stack=int(body.get("starting_stack", settings.default_starting_stack)),
         raise_presets=list(body.get("raise_presets", settings.default_raise_presets)),
+        rotate_dealer=bool(body.get("rotate_dealer", False)),
     )
     return {"room_code": room.code, "seat_id": player.seat_id, "player_token": player.player_token}
 

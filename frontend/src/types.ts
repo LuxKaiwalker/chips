@@ -57,12 +57,14 @@ export interface RoomConfig {
   big_blind: number
   starting_stack: number
   raise_presets: number[]
+  rotate_dealer: boolean
 }
 
 export interface RoomState {
   code: string
   phase: RoomPhase
   host_seat_id: number
+  current_dealer_seat: number
   config: RoomConfig
   players: Player[]
   hand: HandState | null

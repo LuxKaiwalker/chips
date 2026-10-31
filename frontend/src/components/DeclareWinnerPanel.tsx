@@ -4,12 +4,12 @@ import type { HandState, Player } from '../types'
 export function DeclareWinnerPanel({
   hand,
   players,
-  isHost,
+  isDealer,
   send,
 }: {
   hand: HandState
   players: Player[]
-  isHost: boolean
+  isDealer: boolean
   send: (payload: Record<string, unknown>) => void
 }) {
   const [selections, setSelections] = useState<Record<number, number[]>>({})
@@ -43,11 +43,11 @@ export function DeclareWinnerPanel({
 
   const allAssigned = hand.pots.every((_, i) => (selections[i] ?? []).length > 0)
 
-  if (!isHost) {
+  if (!isDealer) {
     return (
       <div className="card">
         <h3>Showdown</h3>
-        <p className="muted">Waiting for the host to declare who won.</p>
+        <p className="muted">Waiting for the dealer to declare who won.</p>
       </div>
     )
   }

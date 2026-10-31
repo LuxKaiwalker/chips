@@ -20,6 +20,7 @@ export function Table({
   const hand = room.hand
   const me = room.players.find((p) => p.seat_id === mySeatId)
   const isHost = mySeatId === room.host_seat_id
+  const isDealer = mySeatId === room.current_dealer_seat
 
   return (
     <div className="screen">
@@ -47,8 +48,8 @@ export function Table({
         </div>
       </div>
 
-      {hand && hand.street === 'showdown' && me?.status !== 'folded' && (
-        <DeclareWinnerPanel hand={hand} players={room.players} isHost={isHost} send={send} />
+      {hand && hand.street === 'showdown' && (
+        <DeclareWinnerPanel hand={hand} players={room.players} isDealer={isDealer} send={send} />
       )}
 
       {room.phase === 'between_hands' && (
@@ -61,12 +62,12 @@ export function Table({
           )}
           {me && me.stack === 0 ? (
             <RebuyModal config={room.config} send={send} />
-          ) : isHost ? (
+          ) : isDealer ? (
             <button className="btn btn-primary" style={{ width: '100%' }} onClick={() => send({ type: 'start_hand' })}>
               Start Next Hand
             </button>
           ) : (
-            <p className="muted center-text">Waiting for the host to start the next hand…</p>
+            <p className="muted center-text">Waiting for the dealer to start the next hand…</p>
           )}
         </div>
       )}

@@ -3,7 +3,7 @@ import time
 
 from app.config import settings
 from app.engine import EngineError
-from app.models import Player, PlayerStatus, Room, RoomConfig, RoomPhase
+from app.models import Player, PlayerStatus, Room, RoomConfig, RoomPhase, current_dealer_seat
 
 
 def _validate_name(display_name: str) -> str:
@@ -32,6 +32,7 @@ class RoomManager:
         big_blind: int,
         starting_stack: int,
         raise_presets: list[float],
+        rotate_dealer: bool = False,
     ) -> tuple[Room, Player]:
         display_name = _validate_name(display_name)
         code = self._generate_code()
@@ -40,6 +41,7 @@ class RoomManager:
             big_blind=big_blind,
             starting_stack=starting_stack,
             raise_presets=raise_presets,
+            rotate_dealer=rotate_dealer,
         )
         room = Room(code=code, config=config, host_seat_id=1)
         player = Player(
@@ -103,7 +105,16 @@ class RoomManager:
         del room.players[target_seat_id]
         room.touch()
 
-    def update_config(self, room: Room, requester_seat_id: int, small_blind: int, big_blind: int, starting_stack: int, raise_presets: list[float]) -> None:
+    def update_config(
+        self,
+        room: Room,
+        requester_seat_id: int,
+        small_blind: int,
+        big_blind: int,
+        starting_stack: int,
+        raise_presets: list[float],
+        rotate_dealer: bool = False,
+    ) -> None:
         if requester_seat_id != room.host_seat_id:
             raise EngineError("NOT_HOST", "Only the host can edit room configuration")
         if room.phase != RoomPhase.LOBBY:
@@ -112,6 +123,7 @@ class RoomManager:
         room.config.big_blind = big_blind
         room.config.starting_stack = starting_stack
         room.config.raise_presets = raise_presets
+        room.config.rotate_dealer = rotate_dealer
         for player in room.players.values():
             player.stack = starting_stack
         room.touch()
@@ -128,11 +140,13 @@ def serialize_room(room: Room) -> dict:
         "code": room.code,
         "phase": room.phase.value,
         "host_seat_id": room.host_seat_id,
+        "current_dealer_seat": current_dealer_seat(room),
         "config": {
             "small_blind": room.config.small_blind,
             "big_blind": room.config.big_blind,
             "starting_stack": room.config.starting_stack,
             "raise_presets": room.config.raise_presets,
+            "rotate_dealer": room.config.rotate_dealer,
         },
         "players": [
             {

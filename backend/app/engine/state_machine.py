@@ -3,7 +3,7 @@ import time
 from app.engine import EngineError
 from app.engine.pots import compute_pots
 from app.engine.rules import compute_legal_actions
-from app.models import HandState, Player, PlayerStatus, Pot, Room, RoomPhase, Street
+from app.models import HandState, Player, PlayerStatus, Pot, Room, RoomPhase, Street, current_dealer_seat
 
 _STREET_ORDER = [Street.PREFLOP, Street.FLOP, Street.TURN, Street.RIVER, Street.SHOWDOWN]
 
@@ -312,10 +312,15 @@ def declare_winners(room: Room, seat_id: int, assignments: list[dict]) -> None:
     hand = room.hand
     if hand is None or hand.street != Street.SHOWDOWN:
         raise EngineError("ILLEGAL_ACTION", "No showdown is in progress")
-    if seat_id != room.host_seat_id:
-        raise EngineError("NOT_HOST", "Only the host can declare the winner")
-    if room.players[seat_id].status == PlayerStatus.FOLDED:
-        raise EngineError("ILLEGAL_ACTION", "Folded players cannot declare winners")
+    if seat_id != current_dealer_seat(room):
+        raise EngineError("NOT_DEALER", "Only the current dealer can declare the winner")
+    # No "folded players can't declare" check: declare_winners is now
+    # restricted to exactly one designated arbiter (host, or the current
+    # button holder when rotate_dealer is on) rather than "any non-folded
+    # player" -- that arbiter's own fold status is irrelevant, same as a
+    # real dealer can run a table after mucking their own hand. Keeping
+    # the old check would deadlock a showdown whenever the one authorized
+    # person happens to have folded.
 
     pots = hand.pots
     covered: set[int] = set()

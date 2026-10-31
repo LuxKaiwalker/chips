@@ -2,7 +2,7 @@ import pytest
 
 from app.engine import EngineError
 from app.engine.state_machine import advance_runout, apply_action, declare_winners, start_new_hand, toggle_sit_out
-from app.models import PlayerStatus, RoomPhase, Street
+from app.models import PlayerStatus, RoomPhase, Street, current_dealer_seat
 from tests.helpers import make_room
 
 
@@ -187,7 +187,7 @@ def test_fold_out_auto_awards_without_showdown():
     assert room.players[3].stack == 101  # kept own bb(2) back plus seat2's sb(1)
 
 
-def test_declare_winners_requires_host():
+def test_declare_winners_requires_dealer():
     room = make_room({1: 50, 2: 50, 3: 50})
     start_new_hand(room)
     apply_action(room, 1, "call")
@@ -196,10 +196,53 @@ def test_declare_winners_requires_host():
     check_through_to_showdown(room)
     with pytest.raises(EngineError) as exc:
         declare_winners(room, 2, [{"pot_index": 0, "winner_seats": [2]}])  # seat 2 is not host
-    assert exc.value.code == "NOT_HOST"
-    # host (seat 1) can still declare
+    assert exc.value.code == "NOT_DEALER"
+    # host (seat 1) can still declare -- rotate_dealer defaults to False
     declare_winners(room, 1, [{"pot_index": 0, "winner_seats": [2]}])
     assert room.phase == RoomPhase.BETWEEN_HANDS
+
+
+def test_declare_winners_allows_folded_sole_arbiter():
+    # The host folds their own hand but must still be able to declare the
+    # winner -- the old "folded players can't declare" rule would deadlock
+    # a showdown whenever the one authorized arbiter happens to have folded.
+    room = make_room({1: 50, 2: 50, 3: 50})
+    start_new_hand(room)
+    assert room.hand.to_act_seat == 1
+    apply_action(room, 1, "fold")  # host (seat 1) folds
+    apply_action(room, 2, "call")
+    apply_action(room, 3, "check")
+    check_through_to_showdown(room)
+    declare_winners(room, 1, [{"pot_index": 0, "winner_seats": [2]}])
+    assert room.phase == RoomPhase.BETWEEN_HANDS
+
+
+def test_rotate_dealer_follows_button():
+    room = make_room({1: 100, 2: 100, 3: 100})  # host_seat_id = 1 (see helpers.make_room)
+    room.config.rotate_dealer = True
+
+    # No hand yet -- falls back to host (there's no button to point to).
+    assert current_dealer_seat(room) == room.host_seat_id == 1
+
+    start_new_hand(room)
+    assert room.hand.button_seat == 1
+    assert current_dealer_seat(room) == 1  # button holder, same as host here
+
+    # Fold the hand out so the button rotates for hand 2.
+    apply_action(room, 1, "fold")
+    apply_action(room, 2, "fold")
+    assert room.phase == RoomPhase.BETWEEN_HANDS
+    # dealer authority stays with the just-finished hand's button holder
+    # until the next hand actually starts and moves it.
+    assert current_dealer_seat(room) == 1
+
+    start_new_hand(room)
+    assert room.hand.button_seat == 2
+    assert current_dealer_seat(room) == 2  # now the non-host button holder
+
+    # With rotate_dealer off, it's always the host regardless of the button.
+    room.config.rotate_dealer = False
+    assert current_dealer_seat(room) == room.host_seat_id == 1
 
 
 def test_full_hand_runs_to_showdown_via_checks():

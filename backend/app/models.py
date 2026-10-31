@@ -62,6 +62,12 @@ class RoomConfig:
     starting_stack: int
     raise_presets: list[float]
     blind_schedule: None = None  # extension point for future tournament mode; unused
+    # When False (default), the host alone starts hands and declares
+    # showdown winners -- the only two "pacing/arbitration" checkpoints
+    # that aren't equally available to every player. When True, that
+    # responsibility instead rotates with the dealer button each hand,
+    # like a physical deal would -- see current_dealer_seat() below.
+    rotate_dealer: bool = False
 
 
 @dataclass
@@ -106,3 +112,16 @@ class Room:
 
     def touch(self) -> None:
         self.last_activity_at = time.time()
+
+
+def current_dealer_seat(room: Room) -> int:
+    """The seat authorized to start a hand / declare showdown winners.
+
+    Always the host unless config.rotate_dealer is on, in which case it's
+    whoever currently holds the dealer button -- reusing the existing
+    per-hand button rotation rather than a separate rotation mechanism.
+    Falls back to the host before the first hand (there's no button yet).
+    """
+    if room.config.rotate_dealer and room.hand is not None:
+        return room.hand.button_seat
+    return room.host_seat_id

@@ -93,6 +93,7 @@ export async function createRoom(params: {
   big_blind: number
   starting_stack: number
   raise_presets: number[]
+  rotate_dealer: boolean
 }): Promise<{ room_code: string; seat_id: number; player_token: string }> {
   const data = await request('/rooms', params)
   setPlayerToken(data.room_code, data.player_token)

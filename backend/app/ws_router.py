@@ -12,7 +12,7 @@ from app.engine.state_machine import (
     start_new_hand,
     toggle_sit_out,
 )
-from app.models import PlayerStatus
+from app.models import PlayerStatus, current_dealer_seat
 from app.rate_limit import FixedWindowLimiter, client_ip
 from app.rooms import room_manager
 from app.ws_manager import connection_manager
@@ -87,10 +87,11 @@ async def _handle_message(room, seat_id: int, msg: dict) -> None:
                 big_blind=int(msg["big_blind"]),
                 starting_stack=int(msg["starting_stack"]),
                 raise_presets=list(msg["raise_presets"]),
+                rotate_dealer=bool(msg.get("rotate_dealer", room.config.rotate_dealer)),
             )
         elif msg_type == "start_hand":
-            if seat_id != room.host_seat_id:
-                raise EngineError("NOT_HOST", "Only the host can start a hand")
+            if seat_id != current_dealer_seat(room):
+                raise EngineError("NOT_DEALER", "Only the current dealer can start a hand")
             if len(room.players) < 2:
                 raise EngineError("NOT_ENOUGH_PLAYERS", "Need at least 2 players to start a hand")
             start_new_hand(room)

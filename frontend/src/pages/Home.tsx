@@ -15,6 +15,7 @@ export function Home({
   const [smallBlind, setSmallBlind] = useState(1)
   const [bigBlind, setBigBlind] = useState(2)
   const [startingStack, setStartingStack] = useState(200)
+  const [rotateDealer, setRotateDealer] = useState(false)
   const [joinCode, setJoinCode] = useState(initialJoinCode ?? '')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -30,6 +31,7 @@ export function Home({
         big_blind: bigBlind,
         starting_stack: startingStack,
         raise_presets: [0.33, 0.5, 0.75, 1.0],
+        rotate_dealer: rotateDealer,
       })
       onEnterRoom(res.room_code)
     } catch (err) {
@@ -95,6 +97,12 @@ export function Home({
             <div className="field">
               <label>Starting stack (per player)</label>
               <input type="number" min={1} value={startingStack} onChange={(e) => setStartingStack(Number(e.target.value))} />
+            </div>
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="checkbox" checked={rotateDealer} onChange={(e) => setRotateDealer(e.target.checked)} />
+                Rotate dealer duties each hand
+              </label>
             </div>
             {error && <div className="error-banner">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>

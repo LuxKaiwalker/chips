@@ -17,6 +17,7 @@ export function Lobby({
   const [sb, setSb] = useState(room.config.small_blind)
   const [bb, setBb] = useState(room.config.big_blind)
   const [stack, setStack] = useState(room.config.starting_stack)
+  const [rotateDealer, setRotateDealer] = useState(room.config.rotate_dealer)
 
   function saveConfig(e: React.FormEvent) {
     e.preventDefault()
@@ -26,6 +27,7 @@ export function Lobby({
       big_blind: bb,
       starting_stack: stack,
       raise_presets: room.config.raise_presets,
+      rotate_dealer: rotateDealer,
     })
   }
 
@@ -66,13 +68,24 @@ export function Lobby({
               <label>Starting stack</label>
               <input type="number" min={1} value={stack} onChange={(e) => setStack(Number(e.target.value))} />
             </div>
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="checkbox" checked={rotateDealer} onChange={(e) => setRotateDealer(e.target.checked)} />
+                Rotate dealer duties each hand
+              </label>
+              <p className="muted" style={{ marginTop: '0.1rem' }}>
+                When on, starting a hand and declaring the showdown winner is done by whoever holds the dealer
+                button that hand, instead of always the host.
+              </p>
+            </div>
             <button className="btn" type="submit">
               Save
             </button>
           </form>
         ) : (
           <p className="muted">
-            Blinds {room.config.small_blind}/{room.config.big_blind} · Starting stack {room.config.starting_stack}.
+            Blinds {room.config.small_blind}/{room.config.big_blind} · Starting stack {room.config.starting_stack} ·
+            Dealer duties {room.config.rotate_dealer ? 'rotate each hand' : 'stay with the host'}.
             Only the host can change this before the first hand.
           </p>
         )}
