@@ -22,17 +22,28 @@ _ws_connect_limiter = FixedWindowLimiter(max_hits=30, window_seconds=10)
 
 @router.websocket("/ws/{room_code}")
 async def room_socket(ws: WebSocket, room_code: str, session_token: str = "", player_token: str = ""):
+    # Uvicorn's websockets protocol implementation hardcodes a plain HTTP
+    # 403 (discarding whatever custom `code` is passed) if the app calls
+    # ws.close() *before* ws.accept() -- confirmed by reading
+    # websockets_sansio_impl.py. A browser's native WebSocket never upgrades
+    # in that case, so its onclose event never sees 4401/4404/4429 at all,
+    # just a generic abnormal-closure code -- silently breaking every
+    # close-code-based recovery path on the frontend. Accepting first means
+    # a real WS close frame is sent afterward, which does carry the code.
     if not _ws_connect_limiter.allow(client_ip(ws)):
+        await ws.accept()
         await ws.close(code=4429)
         return
 
     if not is_valid_session_token(session_token):
+        await ws.accept()
         await ws.close(code=4401)
         return
 
     try:
         room, player = room_manager.rejoin_room(room_code, player_token)
     except EngineError:
+        await ws.accept()
         await ws.close(code=4404)
         return
 
