@@ -14,9 +14,12 @@ class Settings:
     session_token_ttl_hours: int = _env_int("SESSION_TOKEN_TTL_HOURS", 24)
 
     max_seats: int = _env_int("MAX_SEATS", 10)
-    room_code_length: int = 4
-    # Excludes 0/O/1/I to avoid ambiguous codes read aloud across a table.
-    room_code_alphabet: str = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    # Digits only, 6 long -- easier to read aloud/type on a phone keypad
+    # than a mixed alphanumeric code, at the cost of a smaller code space
+    # (1,000,000 possibilities vs. 4 chars from a 32-symbol alphabet,
+    # ~1.05M -- about the same, just all-numeric instead of mixed).
+    room_code_length: int = 6
+    room_code_alphabet: str = "0123456789"
 
     cleanup_sweep_interval_seconds: int = _env_int("CLEANUP_SWEEP_INTERVAL_SECONDS", 60)
     room_empty_grace_seconds: int = _env_int("ROOM_EMPTY_GRACE_SECONDS", 600)

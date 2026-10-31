@@ -90,7 +90,7 @@ limiting the public-deployment mode's nginx config adds on top — see
 ## How a game works
 
 1. One person creates a room (sets blinds + starting stack) and shares the
-   4-character room code. Everyone else joins with that code and a name.
+   6-digit room code. Everyone else joins with that code and a name.
 2. Any player can hit **Start Hand** once there are 2+ players. The app
    tracks the dealer button, blinds, and whose turn it is to act.
 3. The app never shows card values — it shows a status like "Dealing the

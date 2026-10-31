@@ -50,7 +50,7 @@ export function Home({
     setBusy(true)
     setError(null)
     try {
-      const res = await joinRoom(joinCode.trim().toUpperCase(), displayName)
+      const res = await joinRoom(joinCode.trim(), displayName)
       onEnterRoom(res.room_code)
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -109,8 +109,10 @@ export function Home({
               <label>Room code</label>
               <input
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                style={{ textTransform: 'uppercase', letterSpacing: '0.2em' }}
+                onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                style={{ letterSpacing: '0.2em' }}
                 maxLength={6}
                 required
               />
