@@ -106,7 +106,10 @@
       User = "REPLACE_WITH_YOUR_USERNAME";
       WorkingDirectory = "/REPLACE/WITH/PATH/TO/chips";
       EnvironmentFile = "/etc/chips-backend.env";
-      ExecStart = "/REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh";
+      # ${pkgs.bash}/bin/bash explicitly -- NixOS's default systemd
+      # service PATH doesn't include bash, so the script's own
+      # "#!/usr/bin/env bash" shebang fails with exit code 127.
+      ExecStart = "${pkgs.bash}/bin/bash /REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh";
       Restart = "on-failure";
       RestartSec = 2;
     };

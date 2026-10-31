@@ -93,7 +93,16 @@ This exact file has been validated with a full `nixos-rebuild build`
 needed): confirmed both `chips-api.vxliu.com` and `membase-api.vxliu.com`
 come out as separate, correct server blocks in the generated nginx.conf,
 and both hostnames appear in the generated cloudflared ingress list on the
-one shared tunnel.
+one shared tunnel. The `chips-backend` unit's `ExecStart` was also
+actually *executed* (not just evaluated) under the exact restrictive
+`PATH` NixOS generates for systemd services -- which is how an earlier
+version of this file was caught failing with `exit code=127` ("env:
+'bash': No such file or directory"). NixOS's default systemd service PATH
+has no `bash` in it at all, so the script's own `#!/usr/bin/env bash`
+shebang can't resolve; `ExecStart` now invokes `${pkgs.bash}/bin/bash`
+directly instead of relying on the shebang. `nixos-rebuild build` alone
+would never have caught this -- it only confirms the config evaluates and
+the closure builds, not that a service actually runs once activated.
 
 1. Replace `/etc/nixos/configuration.nix` with
    `deploy/local/configuration.nix.full`'s contents.
