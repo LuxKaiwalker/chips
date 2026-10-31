@@ -310,6 +310,8 @@ def declare_winners(room: Room, seat_id: int, assignments: list[dict]) -> None:
     hand = room.hand
     if hand is None or hand.street != Street.SHOWDOWN:
         raise EngineError("ILLEGAL_ACTION", "No showdown is in progress")
+    if seat_id != room.host_seat_id:
+        raise EngineError("NOT_HOST", "Only the host can declare the winner")
     if room.players[seat_id].status == PlayerStatus.FOLDED:
         raise EngineError("ILLEGAL_ACTION", "Folded players cannot declare winners")
 

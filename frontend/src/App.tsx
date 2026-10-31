@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getLastRoomCode, getSessionToken, rejoinRoom } from './api/http'
+import { clearLastRoomCode, clearPlayerToken, getLastRoomCode, getSessionToken, rejoinRoom } from './api/http'
 import { PassphraseGate } from './pages/PassphraseGate'
 import { Home } from './pages/Home'
 import { Lobby } from './pages/Lobby'
@@ -63,11 +63,36 @@ function App() {
     )
   }
 
-  return <RoomView roomCode={roomCode} mySeatId={mySeatId} />
+  return (
+    <RoomView
+      roomCode={roomCode}
+      mySeatId={mySeatId}
+      onLeave={() => {
+        setRoomCode(null)
+        setMySeatId(null)
+        setStage('home')
+      }}
+    />
+  )
 }
 
-function RoomView({ roomCode, mySeatId }: { roomCode: string; mySeatId: number }) {
+function RoomView({
+  roomCode,
+  mySeatId,
+  onLeave,
+}: {
+  roomCode: string
+  mySeatId: number
+  onLeave: () => void
+}) {
   const { room, connected, error, send } = useRoomConnection(roomCode)
+
+  function leaveRoom() {
+    if (!window.confirm('Leave this room? You can rejoin with the room code as long as it still exists.')) return
+    clearPlayerToken(roomCode)
+    clearLastRoomCode()
+    onLeave()
+  }
 
   if (!room) {
     return (
@@ -83,18 +108,18 @@ function RoomView({ roomCode, mySeatId }: { roomCode: string; mySeatId: number }
     <>
       {!connected && (
         <div className="error-banner" style={{ margin: '0.5rem' }}>
-          Reconnecting…
+          🔄 Reconnecting…
         </div>
       )}
       {error && (
         <div className="error-banner" style={{ margin: '0.5rem' }}>
-          {error}
+          ⚠️ {error}
         </div>
       )}
       {room.phase === 'lobby' ? (
-        <Lobby room={room} mySeatId={mySeatId} send={send} />
+        <Lobby room={room} mySeatId={mySeatId} send={send} onLeave={leaveRoom} />
       ) : (
-        <Table room={room} mySeatId={mySeatId} send={send} />
+        <Table room={room} mySeatId={mySeatId} send={send} onLeave={leaveRoom} />
       )}
     </>
   )

@@ -5,15 +5,18 @@ export function Lobby({
   room,
   mySeatId,
   send,
+  onLeave,
 }: {
   room: RoomState
   mySeatId: number
   send: (payload: Record<string, unknown>) => void
+  onLeave: () => void
 }) {
   const isHost = mySeatId === room.host_seat_id
   const [sb, setSb] = useState(room.config.small_blind)
   const [bb, setBb] = useState(room.config.big_blind)
   const [stack, setStack] = useState(room.config.starting_stack)
+  const [copied, setCopied] = useState(false)
 
   function saveConfig(e: React.FormEvent) {
     e.preventDefault()
@@ -26,32 +29,43 @@ export function Lobby({
     })
   }
 
+  function copyCode() {
+    navigator.clipboard?.writeText(room.code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   return (
     <div className="screen">
       <div className="card center-text">
-        <h2>Room {room.code}</h2>
+        <h2>
+          {room.code}{' '}
+          <button className="link-btn" onClick={copyCode} title="Copy room code">
+            {copied ? '✅' : '📋'}
+          </button>
+        </h2>
         <p className="muted">Share this code with other players at the table.</p>
       </div>
 
       <div className="card">
-        <h3>Players ({room.players.length})</h3>
+        <h3>👥 Players ({room.players.length})</h3>
         <div className="seat-list">
           {room.players.map((p) => (
             <div key={p.seat_id} className={`seat ${!p.connected ? 'disconnected' : ''}`}>
               <span>
-                {p.display_name}
-                {p.seat_id === room.host_seat_id && <span className="badge">host</span>}
+                {p.connected ? '🟢' : '🔴'} {p.display_name}
+                {p.seat_id === room.host_seat_id && <span className="badge" title="Host">👑</span>}
                 {p.seat_id === mySeatId && <span className="badge">you</span>}
-                {!p.connected && <span className="badge">disconnected</span>}
               </span>
-              <span className="muted">{p.stack} chips</span>
+              <span className="muted">🪙 {p.stack}</span>
             </div>
           ))}
         </div>
       </div>
 
       <div className="card">
-        <h3>Table Stakes</h3>
+        <h3>🎯 Table Stakes</h3>
         {isHost ? (
           <form onSubmit={saveConfig}>
             <div className="field">
@@ -67,25 +81,35 @@ export function Lobby({
               <input type="number" min={1} value={stack} onChange={(e) => setStack(Number(e.target.value))} />
             </div>
             <button className="btn" type="submit">
-              Save
+              💾 Save
             </button>
           </form>
         ) : (
           <p className="muted">
-            Blinds {room.config.small_blind}/{room.config.big_blind}, starting stack {room.config.starting_stack}.
-            Only the host can change this before the first hand.
+            Blinds {room.config.small_blind}/{room.config.big_blind} · Starting stack {room.config.starting_stack}.
+            Only the host (👑) can change this before the first hand.
           </p>
         )}
       </div>
 
-      <button
-        className="btn btn-primary"
-        disabled={room.players.length < 2}
-        onClick={() => send({ type: 'start_hand' })}
-      >
-        Start Hand
+      {isHost ? (
+        <>
+          <button
+            className="btn btn-primary"
+            disabled={room.players.length < 2}
+            onClick={() => send({ type: 'start_hand' })}
+          >
+            ▶️ Start Hand
+          </button>
+          {room.players.length < 2 && <p className="muted center-text">Need at least 2 players to start.</p>}
+        </>
+      ) : (
+        <p className="muted center-text">⏳ Waiting for the host to start the hand…</p>
+      )}
+
+      <button className="link-btn" onClick={onLeave} style={{ alignSelf: 'center' }}>
+        🚪 Leave Room
       </button>
-      {room.players.length < 2 && <p className="muted center-text">Need at least 2 players to start.</p>}
     </div>
   )
 }

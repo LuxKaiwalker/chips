@@ -6,6 +6,15 @@ from app.engine import EngineError
 from app.models import Player, PlayerStatus, Room, RoomConfig, RoomPhase
 
 
+def _validate_name(display_name: str) -> str:
+    display_name = display_name.strip()
+    if not display_name:
+        raise EngineError("INVALID_NAME", "Name cannot be empty")
+    if len(display_name) > 24:
+        raise EngineError("INVALID_NAME", "Name is too long (max 24 characters)")
+    return display_name
+
+
 class RoomManager:
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
@@ -24,6 +33,7 @@ class RoomManager:
         starting_stack: int,
         raise_presets: list[float],
     ) -> tuple[Room, Player]:
+        display_name = _validate_name(display_name)
         code = self._generate_code()
         config = RoomConfig(
             small_blind=small_blind,
@@ -51,9 +61,12 @@ class RoomManager:
         return room
 
     def join_room(self, code: str, display_name: str) -> tuple[Room, Player]:
+        display_name = _validate_name(display_name)
         room = self.get_room(code)
         if len(room.players) >= settings.max_seats:
             raise EngineError("ROOM_FULL", "This room is full")
+        if any(p.display_name.casefold() == display_name.casefold() for p in room.players.values()):
+            raise EngineError("NAME_TAKEN", f"{display_name!r} is already taken in this room")
         seat_id = room.next_seat_id
         room.next_seat_id += 1
         status = PlayerStatus.SITTING_OUT

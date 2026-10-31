@@ -138,7 +138,7 @@ def test_side_pots_three_way_allin():
     advance_runout(room, 3)
     assert room.hand.street == Street.SHOWDOWN
 
-    declare_winners(room, 3, [
+    declare_winners(room, 1, [  # seat 1 is host (make_room's host_seat_id = min seat)
         {"pot_index": 0, "winner_seats": [3]},
         {"pot_index": 1, "winner_seats": [3]},
     ])
@@ -154,6 +154,21 @@ def test_fold_out_auto_awards_without_showdown():
     assert room.phase == RoomPhase.BETWEEN_HANDS
     assert room.hand.last_result["reason"] == "fold_out"
     assert room.players[3].stack == 101  # kept own bb(2) back plus seat2's sb(1)
+
+
+def test_declare_winners_requires_host():
+    room = make_room({1: 50, 2: 50, 3: 50})
+    start_new_hand(room)
+    apply_action(room, 1, "call")
+    apply_action(room, 2, "call")
+    apply_action(room, 3, "check")
+    check_through_to_showdown(room)
+    with pytest.raises(EngineError) as exc:
+        declare_winners(room, 2, [{"pot_index": 0, "winner_seats": [2]}])  # seat 2 is not host
+    assert exc.value.code == "NOT_HOST"
+    # host (seat 1) can still declare
+    declare_winners(room, 1, [{"pot_index": 0, "winner_seats": [2]}])
+    assert room.phase == RoomPhase.BETWEEN_HANDS
 
 
 def test_full_hand_runs_to_showdown_via_checks():

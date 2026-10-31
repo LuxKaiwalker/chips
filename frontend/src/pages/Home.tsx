@@ -69,10 +69,10 @@ export function Home({
       <div className="card">
         <div className="row" style={{ marginBottom: '1rem' }}>
           <button className={`btn ${mode === 'create' ? 'btn-primary' : ''}`} style={{ flex: 1 }} onClick={() => setMode('create')}>
-            Create Room
+            ➕ Create
           </button>
           <button className={`btn ${mode === 'join' ? 'btn-primary' : ''}`} style={{ flex: 1 }} onClick={() => setMode('join')}>
-            Join Room
+            🔑 Join
           </button>
         </div>
 
@@ -96,7 +96,7 @@ export function Home({
             </div>
             {error && <div className="error-banner">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-              Create Room
+              ➕ Create Room
             </button>
           </form>
         ) : (
@@ -119,7 +119,7 @@ export function Home({
             </div>
             {error && <div className="error-banner">{error}</div>}
             <button className="btn btn-primary" type="submit" disabled={busy} style={{ width: '100%' }}>
-              Join Room
+              🔑 Join Room
             </button>
           </form>
         )}

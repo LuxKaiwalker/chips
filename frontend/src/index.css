@@ -156,6 +156,48 @@ h1, h2, h3 { margin: 0 0 0.5rem 0; }
   background: var(--surface-2);
   border-radius: 8px;
   font-weight: 600;
+  animation: stage-pulse 0.5s ease-out;
+}
+
+.stage-label { margin-top: 0.3rem; }
+
+.board-slots {
+  display: flex;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.board-slot {
+  opacity: 0.3;
+  transform: scale(0.85);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.board-slot.lit {
+  opacity: 1;
+  animation: card-light-up 0.5s ease-out both;
+}
+
+@keyframes card-light-up {
+  0% { opacity: 0.3; transform: scale(0.7) rotate(-8deg); filter: drop-shadow(0 0 0 transparent); }
+  60% { opacity: 1; transform: scale(1.25) rotate(4deg); filter: drop-shadow(0 0 8px var(--accent)); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 0 transparent); }
+}
+
+@keyframes stage-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
+  100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+
+.action-log {
+  max-height: 150px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.82rem;
 }
 
 .action-panel {

@@ -43,6 +43,10 @@ export function setPlayerToken(roomCode: string, token: string): void {
   localStorage.setItem(playerTokenKey(roomCode), token)
 }
 
+export function clearPlayerToken(roomCode: string): void {
+  localStorage.removeItem(playerTokenKey(roomCode))
+}
+
 class ApiError extends Error {
   code?: string
   status?: number

@@ -29,6 +29,34 @@ def test_create_join_rejoin():
     assert exc.value.code == "PLAYER_NOT_FOUND"
 
 
+def test_duplicate_display_name_rejected():
+    rm = RoomManager()
+    room, _host = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0])
+    rm.join_room(room.code, "Bob")
+
+    with pytest.raises(EngineError) as exc:
+        rm.join_room(room.code, "alice")  # case-insensitive match against the host's name
+    assert exc.value.code == "NAME_TAKEN"
+
+    with pytest.raises(EngineError) as exc:
+        rm.join_room(room.code, "  Bob  ")  # whitespace-trimmed match
+    assert exc.value.code == "NAME_TAKEN"
+
+    # a genuinely different name still works
+    rm.join_room(room.code, "Carol")
+
+
+def test_name_validation():
+    rm = RoomManager()
+    with pytest.raises(EngineError) as exc:
+        rm.create_room("   ", 1, 2, 200, [0.5, 1.0])
+    assert exc.value.code == "INVALID_NAME"
+
+    with pytest.raises(EngineError) as exc:
+        rm.create_room("x" * 25, 1, 2, 200, [0.5, 1.0])
+    assert exc.value.code == "INVALID_NAME"
+
+
 def test_update_config_host_only_and_lobby_only():
     rm = RoomManager()
     room, host = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0])

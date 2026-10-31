@@ -82,6 +82,8 @@ async def _handle_message(room, seat_id: int, msg: dict) -> None:
                 raise_presets=list(msg["raise_presets"]),
             )
         elif msg_type == "start_hand":
+            if seat_id != room.host_seat_id:
+                raise EngineError("NOT_HOST", "Only the host can start a hand")
             if len(room.players) < 2:
                 raise EngineError("NOT_ENOUGH_PLAYERS", "Need at least 2 players to start a hand")
             start_new_hand(room)

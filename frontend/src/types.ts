@@ -68,9 +68,17 @@ export interface RoomState {
 }
 
 export const STREET_DEAL_LABEL: Record<Street, string> = {
-  preflop: 'Preflop — deal 2 hole cards to each player',
-  flop: 'Dealing the Flop — 3 community cards',
-  turn: 'Dealing the Turn — 1 community card',
-  river: 'Dealing the River — 1 community card',
-  showdown: 'Showdown — reveal hands',
+  preflop: '🂠🂠 Preflop — deal 2 hole cards to each player',
+  flop: '🂠🂠🂠 Dealing the Flop',
+  turn: '🂠 Dealing the Turn',
+  river: '🂠 Dealing the River',
+  showdown: '🏆 Showdown — reveal hands',
+}
+
+export const STREET_CARD_COUNT: Record<Street, number> = {
+  preflop: 0,
+  flop: 3,
+  turn: 4,
+  river: 5,
+  showdown: 5,
 }
