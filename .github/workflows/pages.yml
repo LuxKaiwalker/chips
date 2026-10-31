@@ -3,10 +3,11 @@ name: Publish frontend to GitHub Pages
 # Builds the frontend and publishes it via GitHub's own Pages deployment
 # action -- see DEPLOYMENT.md "Publishing the frontend to GitHub Pages".
 # Requires the repo's Settings -> Pages -> Source to be set to
-# "GitHub Actions" (one-time, manual -- this workflow can't flip that
-# setting itself), and a repository variable CHIPS_API_URL set to your
-# backend's public origin (Settings -> Secrets and variables -> Actions ->
-# Variables), e.g. https://your-chips-api.example.com -- no trailing slash.
+# "GitHub Actions", and Settings -> Pages -> Custom domain set to
+# chips.vxliu.com (one-time, manual -- this workflow can't flip either
+# setting itself), and a repository variable CHIPS_API_URL set to
+# https://chips-api.vxliu.com (Settings -> Secrets and variables ->
+# Actions -> Variables) -- no trailing slash.
 #
 # Only this frontend gets published here; the backend is deployed
 # separately (nginx + Cloudflare Tunnel, run as a systemd service) per
@@ -43,14 +44,14 @@ jobs:
       - working-directory: frontend
         run: npm ci
       - working-directory: frontend
-        # VITE_BASE_PATH=/chips/ matches this repo's default GitHub Pages
-        # project-site URL (https://<user>.github.io/chips/). If you set up
-        # a custom domain instead (a CNAME file in frontend/public/), change
-        # this to VITE_BASE_PATH=/ -- see DEPLOYMENT.md.
+        # VITE_BASE_PATH=/ because this publishes to the custom domain
+        # chips.vxliu.com (served from root), not the default
+        # <user>.github.io/chips/ project-site URL -- see
+        # frontend/public/CNAME and DEPLOYMENT.md.
         run: npm run build
         env:
           VITE_API_BASE: ${{ vars.CHIPS_API_URL }}
-          VITE_BASE_PATH: /chips/
+          VITE_BASE_PATH: /
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

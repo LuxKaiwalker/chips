@@ -58,73 +58,90 @@ showdown, the equal-information design -- is unchanged.
 
 ### 1. A domain on Cloudflare
 
-You need at least one domain with its DNS hosted on Cloudflare (point its
-nameservers at Cloudflare, or add it as a site there) for the backend's
-public hostname. The frontend doesn't need one -- GitHub Pages' default
-`https://<your-github-username>.github.io/chips/` URL works fine without
-owning a domain.
+This project uses `vxliu.com`, already hosted on Cloudflare (same account
+as the `membase.vxliu.com` deployment) -- `chips.vxliu.com` (frontend) and
+`chips-api.vxliu.com` (backend) are sibling subdomains of it, so no new
+domain or DNS zone setup is needed, just the two records/settings below.
 
 ### 2. Backend: nginx + Cloudflare Tunnel
+
+`deploy/local/nginx-chips.conf` and `deploy/local/cloudflared-config.yml`
+already have `chips-api.vxliu.com` / `https://chips.vxliu.com` filled in
+(gitignored -- see "Keeping your real deploy config" below). The tunnel ID
+and credentials-file path in the cloudflared config are still
+placeholders; step 4 below fills those in.
 
 1. Generate `scripts/run-prod.sh`'s virtualenv and confirm it runs once
    manually: `CHIPS_PASSPHRASE=test ./scripts/run-prod.sh` (Ctrl-C after
    confirming `curl 127.0.0.1:8000/api/health` returns `{"ok":true}`).
-2. Copy `deploy/nginx-chips.conf` in (as a traditional
-   `/etc/nginx/sites-enabled/` file, or adapted into a NixOS
-   `services.nginx.virtualHosts` block's `extraConfig`), with your real
-   backend hostname and frontend origin substituted in place of the
-   placeholders. It listens on `127.0.0.1:8080` only.
-3. Pick a backend hostname that's a **sibling** subdomain of your
-   frontend's (e.g. frontend `chips.your-domain.com`, backend
-   `chips-api.your-domain.com`), **not** a child of it (e.g.
-   `api.chips.your-domain.com`) -- that's two subdomain levels below the
-   zone apex, which Cloudflare's free Universal SSL cert doesn't cover
-   (only the apex and one wildcard level, `*.your-domain.com`). A
-   hostname that deep gets a TLS handshake failure, not a clean error.
-4. Set up the tunnel:
+2. Copy `deploy/local/nginx-chips.conf` to `/etc/nginx/sites-enabled/`
+   (or adapt into a NixOS `services.nginx.virtualHosts` block's
+   `extraConfig`). It listens on `127.0.0.1:8080` only.
+3. Set up the tunnel:
    ```
    cloudflared tunnel login
    cloudflared tunnel create chips
-   cloudflared tunnel route dns chips your-chips-api.example.com
+   cloudflared tunnel route dns chips chips-api.vxliu.com
    ```
-   Copy `deploy/cloudflared-config.yml` to wherever `cloudflared` expects
-   it, filling in the tunnel ID, credentials-file path, and hostname
-   `tunnel create`/`route dns` printed. Run it (`cloudflared tunnel run
-   chips`, or a systemd unit / the NixOS `services.cloudflared` module for
-   anything longer-running than a manual test).
-5. Install `deploy/chips-backend.service` (see its header comment) so the
-   backend itself survives a reboot, or fold the equivalent into a NixOS
-   `systemd.services` block.
-6. Confirm end to end: `curl https://your-chips-api.example.com/api/health`
+   Copy `deploy/local/cloudflared-config.yml` to wherever `cloudflared`
+   expects it (conventionally `/etc/cloudflared/config.yml`), filling in
+   the tunnel ID and credentials-file path the `tunnel create` command
+   printed. Run it (`cloudflared tunnel run chips`, or a systemd unit /
+   the NixOS `services.cloudflared` module for anything longer-running
+   than a manual test).
+4. Edit `deploy/local/chips-backend.service`: replace
+   `REPLACE_WITH_A_REAL_PASSPHRASE` with the actual passphrase you want
+   players to type (not `pokernight` -- this is now internet-reachable),
+   then install it:
+   ```
+   sudo cp deploy/local/chips-backend.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now chips-backend
+   ```
+   so the backend survives a reboot. (On NixOS, prefer a
+   `systemd.services.chips-backend` block in `configuration.nix` instead.)
+5. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
    should return `{"ok":true}` -- not a connection error, not a TLS
    failure.
 
 ### Keeping your real deploy config
 
-`deploy/*.conf` / `deploy/*.yml` / `deploy/*.service` are generic
-templates, not your actual production config -- substitute your own
-values rather than editing the tracked files in place. Keep your real,
-filled-in copies under `deploy/local/`, which `.gitignore` excludes
-entirely, so your actual hostnames/tunnel ID never touch a tracked file.
+`deploy/*.conf` / `deploy/*.yml` / `deploy/*.service` (no `local/`) are
+generic templates kept for reference/reuse -- not what's actually
+installed. Your real, filled-in copies live under `deploy/local/`, which
+`.gitignore` excludes entirely, so the real hostnames/tunnel ID/passphrase
+never touch a tracked file.
 
 ### 3. Frontend: GitHub Pages
 
-1. Repo Settings -> Pages -> Source: set to **"GitHub Actions"** (not
+This project's live deployment publishes the frontend to the custom
+domain `chips.vxliu.com`, with the backend reachable at
+`chips-api.vxliu.com` -- `frontend/public/CNAME` and
+`.github/workflows/pages.yml`'s `VITE_BASE_PATH=/` are already set up for
+this (a custom domain serves from the root, not a `/chips/` repo-name
+subpath, which is what you'd get on the default `github.io` URL instead).
+
+1. **DNS**: in Cloudflare's DNS for `vxliu.com`, add a `CNAME` record:
+   `chips` -> `luxkaiwalker.github.io`, proxy status **DNS only** (grey
+   cloud, not orange) -- GitHub's own Let's Encrypt certificate issuance
+   for the custom domain checks for a direct CNAME resolution, which an
+   orange-clouded (proxied) record would interfere with. You can switch
+   it to proxied later once the certificate's issued, if you want
+   Cloudflare's edge features on the frontend too.
+2. Repo Settings -> Pages -> Source: set to **"GitHub Actions"** (not
    "Deploy from a branch", which would just render the README via
    GitHub's default Jekyll theme).
-2. Repo Settings -> Secrets and variables -> Actions -> Variables: add
-   `CHIPS_API_URL` set to your backend's public origin (step 2 above),
-   e.g. `https://your-chips-api.example.com` -- no trailing slash. This
-   isn't a secret (it's a public hostname), a repo *variable* is the
-   right place for it, not a secret.
-3. Push to `main` with a change under `frontend/` (or run the workflow
+3. Repo Settings -> Pages -> Custom domain: enter `chips.vxliu.com`, save.
+   Wait for the DNS check to pass, then tick **Enforce HTTPS** once it's
+   available (may take a few minutes after the DNS record propagates).
+4. Repo Settings -> Secrets and variables -> Actions -> Variables: add
+   `CHIPS_API_URL` set to `https://chips-api.vxliu.com` -- no trailing
+   slash. This isn't a secret (it's a public hostname), a repo *variable*
+   is the right place for it, not a secret.
+5. Push to `main` with a change under `frontend/` (or run the workflow
    manually from the Actions tab) -- `.github/workflows/pages.yml` builds
-   and publishes automatically from there.
-4. If you later set up a custom domain for the frontend instead of the
-   default `github.io` URL, add a `CNAME` file and change
-   `VITE_BASE_PATH` in `.github/workflows/pages.yml` from `/chips/` to
-   `/` (GitHub Pages serves a custom domain from the root, not a
-   repo-name subpath).
+   and publishes automatically from there. First deploy can take a few
+   minutes to become reachable even after the Action finishes.
 
 ## Deployment checklist
 
