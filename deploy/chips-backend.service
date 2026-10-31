@@ -9,6 +9,10 @@
 # On NixOS, prefer a systemd.services.chips-backend block in
 # configuration.nix instead of installing this file directly -- it's kept
 # here as a portable reference for any other systemd-based Linux.
+#
+# CHIPS_PORT only needs setting if something else on this machine already
+# owns 8000 -- delete the line below otherwise. Must match whatever port
+# your nginx config's proxyPass/proxy_pass targets.
 
 [Unit]
 Description=Chips backend (poker chip/pot tracker)
@@ -18,6 +22,7 @@ After=network.target
 Type=simple
 WorkingDirectory=/REPLACE/WITH/PATH/TO/chips
 Environment=CHIPS_PASSPHRASE=REPLACE_WITH_A_REAL_PASSPHRASE
+Environment=CHIPS_PORT=8000
 ExecStart=/REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh
 Restart=on-failure
 RestartSec=2

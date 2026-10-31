@@ -28,7 +28,9 @@ cloudflared (this machine)
 nginx  127.0.0.1:8080        <- CORS, rate limiting, WS upgrade handling
       │  plain HTTP, loopback only
       ▼
-FastAPI backend  127.0.0.1:8000   (scripts/run-prod.sh)
+FastAPI backend  127.0.0.1:8000   (scripts/run-prod.sh; CHIPS_PORT=8001
+                                    on this machine, since 8000 is already
+                                    membase's)
 
 Frontend: published separately to GitHub Pages, talks to the backend's
 public origin directly (VITE_API_BASE) -- not served by the backend at all
@@ -65,52 +67,60 @@ domain or DNS zone setup is needed, just the two records/settings below.
 
 ### 2. Backend: nginx + Cloudflare Tunnel
 
-`deploy/local/nginx-chips.conf` and `deploy/local/cloudflared-config.yml`
-already have `chips-api.vxliu.com` / `https://chips.vxliu.com` filled in
-(gitignored -- see "Keeping your real deploy config" below). The tunnel ID
-and credentials-file path in the cloudflared config are still
-placeholders; step 4 below fills those in.
+**This machine already runs nginx and Cloudflare Tunnel for `membase`, both
+declared in `/etc/nixos/configuration.nix` (`services.nginx.virtualHosts`
+and `services.cloudflared.tunnels."815ad8c7-1554-416e-a2f2-15a9f27bd98e"`).
+Chips reuses that exact same tunnel and nginx instance instead of standing
+up a second one -- no new `cloudflared tunnel create`, no new login.**
 
-1. Generate `scripts/run-prod.sh`'s virtualenv and confirm it runs once
-   manually: `CHIPS_PASSPHRASE=test ./scripts/run-prod.sh` (Ctrl-C after
-   confirming `curl 127.0.0.1:8000/api/health` returns `{"ok":true}`).
-2. Copy `deploy/local/nginx-chips.conf` to `/etc/nginx/sites-enabled/`
-   (or adapt into a NixOS `services.nginx.virtualHosts` block's
-   `extraConfig`). It listens on `127.0.0.1:8080` only.
-3. Set up the tunnel:
+`deploy/local/configuration.nix.snippet` has the exact block to paste into
+`/etc/nixos/configuration.nix` (right after the existing membase
+`services.cloudflared = { ... };` block) -- it's a pure addition, it
+doesn't touch any existing membase line (see the snippet's own header
+comment for why that's safe: `appendHttpConfig` and the tunnel's `ingress`
+set both merge additively in Nix). It proxies to `127.0.0.1:8001`, not
+`8000` -- that port's already taken by membase's own backend on this
+machine.
+
+1. Add the new hostname to the *existing* tunnel (reuses its
+   already-valid credentials on this machine, no interactive login step):
    ```
-   cloudflared tunnel login
-   cloudflared tunnel create chips
-   cloudflared tunnel route dns chips chips-api.vxliu.com
+   cloudflared tunnel route dns membase chips-api.vxliu.com
    ```
-   Copy `deploy/local/cloudflared-config.yml` to wherever `cloudflared`
-   expects it (conventionally `/etc/cloudflared/config.yml`), filling in
-   the tunnel ID and credentials-file path the `tunnel create` command
-   printed. Run it (`cloudflared tunnel run chips`, or a systemd unit /
-   the NixOS `services.cloudflared` module for anything longer-running
-   than a manual test).
-4. Edit `deploy/local/chips-backend.service`: replace
-   `REPLACE_WITH_A_REAL_PASSPHRASE` with the actual passphrase you want
-   players to type (not `pokernight` -- this is now internet-reachable),
-   then install it:
+2. Paste `deploy/local/configuration.nix.snippet`'s contents into
+   `/etc/nixos/configuration.nix`, then:
    ```
-   sudo cp deploy/local/chips-backend.service /etc/systemd/system/
-   sudo systemctl daemon-reload
-   sudo systemctl enable --now chips-backend
+   sudo nixos-rebuild switch
    ```
-   so the backend survives a reboot. (On NixOS, prefer a
-   `systemd.services.chips-backend` block in `configuration.nix` instead.)
-5. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
+3. Start the backend on the non-conflicting port, with a real passphrase:
+   ```
+   CHIPS_PASSPHRASE=yourrealpassphrase CHIPS_PORT=8001 ./scripts/run-prod.sh
+   ```
+   `deploy/local/chips-backend.service` has this pre-filled (path,
+   `CHIPS_PORT=8001`) if you'd rather run it as a systemd unit than a
+   manual/tmux session -- edit in your real passphrase, then
+   `sudo cp deploy/local/chips-backend.service /etc/systemd/system/ &&
+   sudo systemctl daemon-reload && sudo systemctl enable --now
+   chips-backend`. (membase's own backend process isn't systemd-managed on
+   this machine, just run manually -- the unit here is an optional
+   reliability upgrade, not required to match "the same way".)
+4. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
    should return `{"ok":true}` -- not a connection error, not a TLS
    failure.
 
+**If you're setting this up on a different machine** (no existing tunnel
+to extend), `deploy/nginx-chips.conf` and `deploy/cloudflared-config.yml`
+are generic, standalone-nginx-site templates for that case instead --
+see their own header comments; same CORS/rate-limiting/WebSocket logic,
+just not NixOS-module-shaped.
+
 ### Keeping your real deploy config
 
-`deploy/*.conf` / `deploy/*.yml` / `deploy/*.service` (no `local/`) are
-generic templates kept for reference/reuse -- not what's actually
-installed. Your real, filled-in copies live under `deploy/local/`, which
-`.gitignore` excludes entirely, so the real hostnames/tunnel ID/passphrase
-never touch a tracked file.
+`deploy/*.conf` / `deploy/*.yml` / `deploy/*.service` / `deploy/*.snippet`
+(no `local/`) are generic templates kept for reference/reuse -- not what's
+actually installed. Your real, filled-in copies live under `deploy/local/`,
+which `.gitignore` excludes entirely, so the real hostnames/tunnel
+ID/passphrase never touch a tracked file.
 
 ### 3. Frontend: GitHub Pages
 
@@ -152,11 +162,11 @@ subpath, which is what you'd get on the default `github.io` URL instead).
    `127.0.0.1:8080`, reached only via `cloudflared`'s local connection) is
    the only thing in this chain with any path from the public internet,
    and even it has no direct public-facing socket.
-3. Make sure the machine's firewall doesn't expose port 8000 (the
-   backend) or 8080 (nginx) directly -- neither needs to be, or should
-   be, reachable from outside this machine; `cloudflared` is the only
-   process that talks to the outside world, and it does so via an
-   outbound connection, not a listening socket.
+3. Make sure the machine's firewall doesn't expose the backend's port
+   (8000, or 8001 on this machine) or 8080 (nginx) directly -- none of
+   them need to be, or should be, reachable from outside this machine;
+   `cloudflared` is the only process that talks to the outside world, and
+   it does so via an outbound connection, not a listening socket.
 4. Substitute real hostnames into your untracked `deploy/local/` copies
    of the nginx config and cloudflared config -- not the tracked
    templates.

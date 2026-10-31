@@ -16,6 +16,12 @@
 # served by this process -- any backend/app/static left over from a LAN-mode
 # build is simply unused here. For the plain LAN mode where this process
 # serves everything itself from one origin, use ../run.sh instead.
+#
+# CHIPS_PORT (default 8000): override if something else on this machine
+# already owns 8000 -- e.g. this repo's own DEPLOYMENT.md example reuses an
+# existing nginx+Cloudflare Tunnel setup alongside another app, which needs
+# its own port. Whatever you pick here must match the proxyPass/ingress
+# target in your nginx/cloudflared config.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -32,4 +38,4 @@ if [ ! -d backend/.venv ]; then
 fi
 
 cd backend
-exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --log-level info
+exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "${CHIPS_PORT:-8000}" --workers 1 --log-level info
