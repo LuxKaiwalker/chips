@@ -105,19 +105,29 @@ one shared tunnel.
 3. ```
    sudo nixos-rebuild switch
    ```
-4. Start the backend on the non-conflicting port, with a real passphrase:
+4. The backend itself runs as a NixOS-managed systemd service
+   (`systemd.services.chips-backend`, already in
+   `deploy/local/configuration.nix.full` from step 1 above) -- it starts
+   at boot and restarts on failure, matching membase's own always-on
+   presence on this machine. It reads `CHIPS_PASSPHRASE` from
+   `/etc/chips-backend.env` rather than `configuration.nix` itself, since
+   that file is world-readable (0644) and a real passphrase has no
+   business sitting in it in plaintext. Create that file once, before
+   `nixos-rebuild switch` in step 3 (systemd will otherwise fail to start
+   the service with a missing-EnvironmentFile error):
    ```
-   CHIPS_PASSPHRASE=yourrealpassphrase CHIPS_PORT=8001 ./scripts/run-prod.sh
+   sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
+   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
    ```
-   `deploy/local/chips-backend.service` has this pre-filled (path,
-   `CHIPS_PORT=8001`) if you'd rather run it as a systemd unit than a
-   manual/tmux session -- edit in your real passphrase, then
-   `sudo cp deploy/local/chips-backend.service /etc/systemd/system/ &&
-   sudo systemctl daemon-reload && sudo systemctl enable --now
-   chips-backend`. (membase's own backend process isn't systemd-managed on
-   this machine, just run manually -- the unit here is an optional
-   reliability upgrade, not required to match "the same way".)
-5. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
+   If you were running `scripts/run-prod.sh` manually/in a foreground
+   shell to test earlier, stop that process first -- it's bound to the
+   same port 8001 the systemd service will try to bind.
+5. Confirm it's running and enabled for boot:
+   ```
+   systemctl status chips-backend
+   systemctl is-enabled chips-backend   # should print "enabled"
+   ```
+6. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
    should return `{"ok":true}` -- not a connection error, not a TLS
    failure.
 
@@ -130,11 +140,15 @@ config as a standalone NixOS module -- add `./chips.nix` to
 
 **If you're setting this up on NixOS but without an existing tunnel to
 extend**, `deploy/chips.nix` is the generic version of the module
-(placeholders instead of real hostnames/tunnel ID) -- see its header
-comment. **On a non-NixOS machine**, `deploy/nginx-chips.conf` and
-`deploy/cloudflared-config.yml` are standalone-nginx-site templates
-instead -- same CORS/rate-limiting/WebSocket logic, just not
-NixOS-module-shaped.
+(placeholders instead of real hostnames/tunnel ID/username/path), systemd
+service included -- see its header comment. **On a non-NixOS machine**,
+`deploy/nginx-chips.conf` and `deploy/cloudflared-config.yml` are
+standalone-nginx-site templates instead (same CORS/rate-limiting/WebSocket
+logic, just not NixOS-module-shaped), and `deploy/chips-backend.service`
+is a plain, portable systemd unit for the backend itself -- same
+boot-start/auto-restart behavior as the NixOS `systemd.services` block,
+just installed with `systemctl enable` directly instead of declared in
+`configuration.nix`.
 
 ### Keeping your real deploy config
 

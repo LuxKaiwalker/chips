@@ -1,7 +1,9 @@
 # Generic NixOS module template for Chips's nginx (CORS, rate limiting,
-# WebSocket upgrade) + Cloudflare Tunnel ingress -- see DEPLOYMENT.md
-# "nginx + Cloudflare Tunnel" in the chips repo. Substitute your own
-# hostnames, tunnel ID, and local port in place of the placeholders.
+# WebSocket upgrade), Cloudflare Tunnel ingress, and a persistent,
+# boot-starting systemd service for the backend itself -- see
+# DEPLOYMENT.md "nginx + Cloudflare Tunnel" in the chips repo. Substitute
+# your own hostnames, tunnel ID, local port, username, and path in place
+# of the placeholders.
 #
 # Written as its own importable module (add `./chips.nix` to your
 # configuration.nix's `imports`) rather than something to paste inline
@@ -16,6 +18,12 @@
 # line only needs the `ingress` addition shown below -- the tunnel's own
 # `enable`/`credentialsFile`/`default` are presumably already declared
 # wherever that existing tunnel is set up.
+#
+# CHIPS_PASSPHRASE is read from an EnvironmentFile, not declared here --
+# configuration.nix is typically world-readable, so a real secret has no
+# business living in it in plaintext. Create the file with:
+#   sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
+#   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
 
 { config, pkgs, ... }:
 
@@ -78,4 +86,29 @@
 
   services.cloudflared.tunnels."<TUNNEL_ID>".ingress."your-chips-api.example.com" =
     "http://127.0.0.1:8080";
+
+  # Runs the chips backend itself persistently, starting at boot.
+  # CHIPS_PASSPHRASE comes from /etc/chips-backend.env (root:root, mode
+  # 600), NOT from configuration.nix -- that file is world-readable
+  # (0644), so the real passphrase has no business living there in
+  # plaintext. systemd reads EnvironmentFile as root before dropping to
+  # User below, so the vincent user never needs read access to it either.
+  # Create it with:
+  #   sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
+  #   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
+  systemd.services.chips-backend = {
+    description = "Chips backend (poker chip/pot tracker)";
+    after = [ "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    environment.CHIPS_PORT = "8001";
+    serviceConfig = {
+      Type = "simple";
+      User = "REPLACE_WITH_YOUR_USERNAME";
+      WorkingDirectory = "/REPLACE/WITH/PATH/TO/chips";
+      EnvironmentFile = "/etc/chips-backend.env";
+      ExecStart = "/REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+  };
 }
