@@ -73,45 +73,39 @@ and `services.cloudflared.tunnels."815ad8c7-1554-416e-a2f2-15a9f27bd98e"`).
 Chips reuses that exact same tunnel and nginx instance instead of standing
 up a second one -- no new `cloudflared tunnel create`, no new login.**
 
-`deploy/local/chips.nix` has the exact module to add. It's a **separate
-file**, imported from `configuration.nix` -- not pasted inline into it.
-This matters: `appendHttpConfig` and the tunnel's `ingress` set only merge
-additively *across separate NixOS modules*. Writing
-`services.nginx.appendHttpConfig = ...;` a second time inside the SAME
-file as membase's existing `services.nginx = { appendHttpConfig = ...; };`
-is a plain Nix "attribute already defined" parse error, not something the
-module system can merge -- confirmed by actually trying it. A separate
-imported file sidesteps that entirely and touches zero existing lines in
-`configuration.nix` other than one new entry in `imports`. It proxies to
-`127.0.0.1:8001`, not `8000` -- that port's already taken by membase's own
-backend on this machine.
+`deploy/local/configuration.nix.full` is a complete, ready-to-paste
+replacement for `/etc/nixos/configuration.nix` -- membase's existing
+`services.nginx`/`services.cloudflared` blocks with chips's pieces spliced
+directly into the same attribute literals (a second `virtualHosts."..."`
+key, a second `ingress."..."` key, chips's rate-limit zones appended into
+the same `appendHttpConfig` string) rather than declared as separate
+top-level statements. That distinction matters:
+`services.nginx.appendHttpConfig = ...;` written a *second time* elsewhere
+in the same file as membase's existing `services.nginx = { appendHttpConfig
+= ...; };` is a plain Nix "attribute already defined" parse error --
+confirmed by actually reproducing it. Extending the same literal in place,
+as this file does, has no such problem. It proxies to `127.0.0.1:8001`, not
+`8000` -- that port's already taken by membase's own backend on this
+machine.
 
-This has been validated with a full `nixos-rebuild build` (evaluates and
-builds the actual system closure, no `sudo`/activation needed) against a
-copy of the real `configuration.nix` plus this file -- confirmed both
-`chips-api.vxliu.com` and `membase-api.vxliu.com` come out as separate
-server blocks in the generated nginx.conf, membase's left byte-for-byte
-unchanged, and both hostnames appear in the generated cloudflared ingress
-list on the one shared tunnel.
+This exact file has been validated with a full `nixos-rebuild build`
+(evaluates and builds the actual system closure, no `sudo`/activation
+needed): confirmed both `chips-api.vxliu.com` and `membase-api.vxliu.com`
+come out as separate, correct server blocks in the generated nginx.conf,
+and both hostnames appear in the generated cloudflared ingress list on the
+one shared tunnel.
 
-1. Copy `deploy/local/chips.nix` to `/etc/nixos/chips.nix`.
-2. Add it to `configuration.nix`'s existing `imports` list (the only line
-   that needs touching in that file):
-   ```nix
-   imports = [
-     ./hardware-configuration.nix
-     ./chips.nix
-   ];
-   ```
-3. Add the new hostname to the *existing* tunnel (reuses its
+1. Replace `/etc/nixos/configuration.nix` with
+   `deploy/local/configuration.nix.full`'s contents.
+2. Add the new hostname to the *existing* tunnel (reuses its
    already-valid credentials on this machine, no interactive login step):
    ```
    cloudflared tunnel route dns membase chips-api.vxliu.com
    ```
-5. ```
+3. ```
    sudo nixos-rebuild switch
    ```
-6. Start the backend on the non-conflicting port, with a real passphrase:
+4. Start the backend on the non-conflicting port, with a real passphrase:
    ```
    CHIPS_PASSPHRASE=yourrealpassphrase CHIPS_PORT=8001 ./scripts/run-prod.sh
    ```
@@ -123,12 +117,19 @@ list on the one shared tunnel.
    chips-backend`. (membase's own backend process isn't systemd-managed on
    this machine, just run manually -- the unit here is an optional
    reliability upgrade, not required to match "the same way".)
-7. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
+5. Confirm end to end: `curl https://chips-api.vxliu.com/api/health`
    should return `{"ok":true}` -- not a connection error, not a TLS
    failure.
 
+**If you'd rather keep chips's config in its own file** instead of
+splicing it into the existing blocks, `deploy/local/chips.nix` is the same
+config as a standalone NixOS module -- add `./chips.nix` to
+`configuration.nix`'s `imports` list instead of editing the existing
+`services.nginx`/`services.cloudflared` blocks at all. Equally valid
+(also build-verified); purely a matter of which you'd rather maintain.
+
 **If you're setting this up on NixOS but without an existing tunnel to
-extend**, `deploy/chips.nix` is the generic version of the same module
+extend**, `deploy/chips.nix` is the generic version of the module
 (placeholders instead of real hostnames/tunnel ID) -- see its header
 comment. **On a non-NixOS machine**, `deploy/nginx-chips.conf` and
 `deploy/cloudflared-config.yml` are standalone-nginx-site templates
