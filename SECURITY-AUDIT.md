@@ -95,7 +95,7 @@ WebSocket lines are still logged, and now read `"WebSocket /ws/771669"
 
 ### H2. Room-code enumeration oracle — *fixed*
 
-With the passphrase gone, the 6-digit room code is the only secret. Two
+With the passphrase gone, the 6-character room code is the only secret. Two
 cheap oracles existed:
 
 - `join` returned 404 for `ROOM_NOT_FOUND` but 400 for `ROOM_FULL` /
@@ -114,8 +114,9 @@ REST and WebSocket paths — otherwise an attacker alternates between the two
 and halves their cost.
 
 Measured on a live server: a flood of joins against a nonexistent code gets
-**five** probes before `429`, i.e. ~5/min/IP against a 10^6 space — roughly
-139 days to walk it. Tests: `test_rate_limit.py`, `test_ws_limits.py`.
+**five** probes before `429`, i.e. ~5/min/IP. Against the ~10^9 (32^6)
+code space that is centuries per IP to walk; even against the old 10^6
+space it was ~139 days. Tests: `test_rate_limit.py`, `test_ws_limits.py`.
 
 ### H3. Uncapped room creation, unbounded limiter state, unlimited WS messages — *fixed*
 
@@ -136,14 +137,14 @@ This is the deliberate outcome of removing the passphrase gate, not a defect
 awaiting a fix. Stated plainly so it is not mistaken for an oversight:
 
 - Anyone who can reach the URL can create rooms.
-- Anyone who learns or guesses a room's 6-digit code can take a seat, act on
+- Anyone who learns or guesses a room's 6-character code can take a seat, act on
   its turns, rebuy arbitrary chips, and — if they take seat 1 — hold host
   powers.
 - There is no credential to get wrong, no audit trail, and no way to evict a
   connected player (`remove_stale_seat` requires the target to have been
   disconnected 5+ minutes).
 
-What actually protects a game is the 10^6 code space, the 10-minute sweep of
+What actually protects a game is the ~10^9 code space, the 10-minute sweep of
 empty rooms, and the layered rate limiting with its failed-lookup penalty.
 **None of that helps against a botnet**, which defeats per-IP limiting at
 every layer. For a LAN game night this is a reasonable trust model — the same

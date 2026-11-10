@@ -123,9 +123,13 @@ export function Home({
               <label>Room code</label>
               <input
                 value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.replace(/\D/g, ''))}
-                inputMode="numeric"
-                pattern="[0-9]*"
+                // Alphanumeric codes: keep A-Z/0-9, uppercase as typed so it
+                // matches the canonical form the server stores. (The server
+                // also uppercases on lookup, so this is just UX polish.)
+                onChange={(e) => setJoinCode(e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase())}
+                autoCapitalize="characters"
+                autoCorrect="off"
+                spellCheck={false}
                 style={{ letterSpacing: '0.2em' }}
                 maxLength={6}
                 required

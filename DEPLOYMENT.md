@@ -47,11 +47,11 @@ Two real differences from the LAN quick-start mode:
 2. **The app has no authentication at all, and this makes it public.**
    On your own WiFi an attacker has to already be on your network. Reachable
    from the whole internet, anyone who finds the URL can create rooms, and
-   anyone who learns or guesses a room's 6-digit code can take a seat at
+   anyone who learns or guesses a room's 6-character code can take a seat at
    that table, act on its turns, and rebuy arbitrary chips. There is no
    credential to get wrong.
 
-   What stands between a stranger and your game is: the 10^6 room-code
+   What stands between a stranger and your game is: the ~10^9 room-code
    space, the fact that rooms are swept 10 minutes after the last player
    leaves, and layered rate limiting with a penalty on failed lookups
    (nginx zones here, plus the app's own tighter limits in

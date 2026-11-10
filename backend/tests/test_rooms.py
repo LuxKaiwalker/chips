@@ -29,6 +29,22 @@ def test_create_join_rejoin():
     assert exc.value.code == "PLAYER_NOT_FOUND"
 
 
+def test_room_code_is_alphanumeric_and_case_insensitive():
+    from app.config import settings
+
+    rm = RoomManager()
+    room, _ = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0])
+    assert len(room.code) == settings.room_code_length
+    assert all(c in settings.room_code_alphabet for c in room.code)
+    # Lookups canonicalise case, so a lowercased code still resolves.
+    found, _ = rm.rejoin_room(room.code.lower(), rm.rooms[room.code].players[1].player_token)
+    assert found.code == room.code
+    # A malformed code (contains an excluded glyph) is a clean not-found.
+    with pytest.raises(EngineError) as exc:
+        rm.join_room("000000", "Bob")  # 0 is not in the alphabet
+    assert exc.value.code == "ROOM_NOT_FOUND"
+
+
 def test_duplicate_display_name_rejected():
     rm = RoomManager()
     room, _host = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0])

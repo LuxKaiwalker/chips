@@ -23,7 +23,7 @@ player open `http://<that-ip>:8000` in their phone's browser. Everyone needs
 to be on the same WiFi network as the host machine.
 
 **There is no access control.** Anyone who can reach the server can create
-a room, and anyone who knows (or guesses) a room's 6-digit code can take a
+a room, and anyone who knows (or guesses) a room's 6-character code can take a
 seat in it and act on their turn. On your own WiFi that's the same trust
 model as leaving a chip rack on the table — everyone in reach is someone you
 invited. Don't expose this to the internet without putting real access
@@ -99,12 +99,12 @@ of these are overridable by environment variable; see
 Per-IP limiting is defeated by a botnet at every layer. What actually
 protects a game is the combination of the failed-lookup penalty, the short
 room lifetime (`cleanup.py` sweeps empty rooms after 10 minutes) and the
-10^6 room-code space — not the rate limits alone.
+~10^9 room-code space — not the rate limits alone.
 
 ## How a game works
 
 1. One person creates a room (sets blinds + starting stack) and shares the
-   6-digit room code. Everyone else joins with that code and a name.
+   6-character room code. Everyone else joins with that code and a name.
 2. The dealer hits **Start Hand** once there are 2+ players. The app
    tracks the dealer button, blinds, and whose turn it is to act. "Dealer"
    is the host by default, or the current button holder when the room's

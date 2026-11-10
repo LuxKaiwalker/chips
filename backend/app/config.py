@@ -9,12 +9,15 @@ def _env_int(name: str, default: int) -> int:
 
 class Settings:
     max_seats: int = _env_int("MAX_SEATS", 10)
-    # Digits only, 6 long -- easier to read aloud/type on a phone keypad
-    # than a mixed alphanumeric code, at the cost of a smaller code space
-    # (1,000,000 possibilities vs. 4 chars from a 32-symbol alphabet,
-    # ~1.05M -- about the same, just all-numeric instead of mixed).
+    # 6 uppercase alphanumeric characters. Excludes the easily-confused
+    # glyphs (0/O, 1/I) so a code read aloud across a table isn't
+    # ambiguous. 32 symbols ^ 6 = ~1.07e9 (~30 bits) -- about a thousand
+    # times larger than the old 6-digit space (1e6, ~20 bits), which
+    # lengthens room-code enumeration from hours/days to months/years per
+    # IP (see SECURITY-AUDIT.md). Codes are canonicalised to uppercase on
+    # lookup, so case doesn't matter when typing one in.
     room_code_length: int = 6
-    room_code_alphabet: str = "0123456789"
+    room_code_alphabet: str = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 
     # Hard ceiling on resident rooms. Bounds memory against a room-creation
     # flood, and keeps RoomManager._generate_code()'s retry loop from
