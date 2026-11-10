@@ -38,4 +38,12 @@ if [ ! -d backend/.venv ]; then
 fi
 
 cd backend
-exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "${CHIPS_PORT:-8000}" --workers 1 --log-level info
+# Proxy headers are set explicitly rather than relying on uvicorn's
+# defaults: nginx is the only hop that may set them, and a uvicorn
+# upgrade or a stray FORWARDED_ALLOW_IPS could otherwise move the
+# trust boundary. Never use "*" here -- it makes the rate-limit key
+# client-controlled. --ws-max-size caps frames nginx cannot (its
+# client_max_body_size does not apply to WebSocket messages).
+exec .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port "${CHIPS_PORT:-8000}" \
+  --workers 1 --log-level info \
+  --proxy-headers --forwarded-allow-ips 127.0.0.1 --ws-max-size 65536

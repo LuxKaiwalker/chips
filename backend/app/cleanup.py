@@ -1,6 +1,7 @@
 import asyncio
 import time
 
+from app import rate_limit
 from app.config import settings
 from app.rooms import room_manager
 from app.ws_manager import connection_manager
@@ -14,6 +15,10 @@ async def cleanup_loop() -> None:
 
 def sweep_once() -> None:
     now = time.time()
+    # Reclaim rate-limiter keys here rather than on the request path, so
+    # eviction costs nothing per request. Riding the existing 60s loop also
+    # releases the short-window message-limiter keys promptly.
+    rate_limit.sweep_all(now)
     for code, room in list(room_manager.rooms.items()):
         connected = connection_manager.connected_seat_count(code)
         if connected == 0:

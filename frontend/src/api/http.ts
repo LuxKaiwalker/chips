@@ -50,11 +50,18 @@ export function clearPlayerToken(roomCode: string): void {
 class ApiError extends Error {
   code?: string
   status?: number
-  constructor(message: string, code?: string, status?: number) {
+  retryAfter?: number
+  constructor(message: string, code?: string, status?: number, retryAfter?: number) {
     super(message)
     this.code = code
     this.status = status
+    this.retryAfter = retryAfter
   }
+}
+
+function throttleMessage(status: number, retryAfter?: number): string {
+  const wait = retryAfter && retryAfter > 0 ? ` Try again in ${retryAfter}s.` : ' Try again shortly.'
+  return status === 503 ? `The server is at capacity.${wait}` : `Too many requests.${wait}`
 }
 
 async function request(path: string, body?: unknown, auth = true): Promise<any> {
@@ -70,6 +77,20 @@ async function request(path: string, body?: unknown, auth = true): Promise<any> 
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    // Throttle responses need handling before the generic path below.
+    // nginx's own limit_req rejection is an HTML error page with no JSON
+    // body at all, so `data` is empty and the generic branch would render a
+    // bare "Request failed" with no hint that waiting would fix it.
+    if (res.status === 429 || res.status === 503) {
+      const header = Number.parseInt(res.headers.get('Retry-After') ?? '', 10)
+      const retryAfter = Number.isFinite(header) && header > 0 ? header : undefined
+      throw new ApiError(
+        data.message || data.detail || throttleMessage(res.status, retryAfter),
+        data.code,
+        res.status,
+        retryAfter,
+      )
+    }
     // Session tokens live only in the backend's process memory (see
     // README's "in-memory only" limitation) -- any backend restart
     // silently invalidates every outstanding token. Without this, a

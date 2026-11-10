@@ -32,6 +32,14 @@
     limit_req_zone $binary_remote_addr zone=chips_general:10m rate=10r/s;
     # ~1 attempt per 10s/IP -- the one brute-forceable secret in this app.
     limit_req_zone $binary_remote_addr zone=chips_auth:10m rate=6r/m;
+    # Room create/join/rejoin. A whole table shares one NAT address here, so
+    # these are per-table allowances. The app enforces its own tighter,
+    # failure-penalised versions -- see backend/app/limits.py.
+    limit_req_zone $binary_remote_addr zone=chips_lookup:10m rate=60r/m;
+    limit_req_zone $binary_remote_addr zone=chips_create:10m rate=10r/m;
+    # nginx throttles with 503 by default, which differs from the app's own
+    # 429 and reads like an outage. Make both layers agree.
+    limit_req_status 429;
   '';
 
   services.nginx.virtualHosts."your-chips-api.example.com" = {
@@ -49,6 +57,50 @@
         add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
         add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
         add_header Access-Control-Allow-Headers "Content-Type" always;
+        add_header Access-Control-Max-Age 600 always;
+
+        if ($request_method = OPTIONS) {
+          return 204;
+        }
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+      '';
+    };
+    # Separate blocks rather than one, because add_header is not inherited
+    # between sibling locations -- each needs its own CORS headers and
+    # OPTIONS short-circuit. Precedence: exact `=` beats regex beats the `/`
+    # prefix, so each request lands in the block meant for it.
+    locations."= /api/rooms" = {
+      proxyPass = "http://127.0.0.1:8001";
+      extraConfig = ''
+        limit_req zone=chips_create burst=5 nodelay;
+
+        add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
+        add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, X-Session-Token" always;
+        add_header Access-Control-Max-Age 600 always;
+
+        if ($request_method = OPTIONS) {
+          return 204;
+        }
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+      '';
+    };
+    locations."~ ^/api/rooms/[^/]+/(join|rejoin)$" = {
+      proxyPass = "http://127.0.0.1:8001";
+      extraConfig = ''
+        limit_req zone=chips_lookup burst=20 nodelay;
+
+        add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
+        add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
+        add_header Access-Control-Allow-Headers "Content-Type, X-Session-Token" always;
         add_header Access-Control-Max-Age 600 always;
 
         if ($request_method = OPTIONS) {

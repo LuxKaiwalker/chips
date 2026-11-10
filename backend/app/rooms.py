@@ -15,6 +15,22 @@ def _validate_name(display_name: str) -> str:
     return display_name
 
 
+def _validate_code(code: str) -> str:
+    """Reject anything that isn't a well-formed room code before lookup.
+
+    Keeps the not-found response uniform for malformed input (so it isn't a
+    cheaper probe than a well-formed miss) and avoids hashing
+    attacker-supplied strings of arbitrary length.
+    """
+    if (
+        not isinstance(code, str)
+        or len(code) != settings.room_code_length
+        or any(c not in settings.room_code_alphabet for c in code)
+    ):
+        raise EngineError("ROOM_NOT_FOUND", "No room with that code exists")
+    return code
+
+
 class RoomManager:
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
@@ -34,6 +50,12 @@ class RoomManager:
         raise_presets: list[float],
         rotate_dealer: bool = False,
     ) -> tuple[Room, Player]:
+        # Read the setting at call time, not import time, so it is tunable
+        # (and monkeypatchable in tests). This also keeps _generate_code()'s
+        # retry loop from spinning: it would degrade badly if `rooms` were
+        # ever allowed to approach the 10^6 code space.
+        if len(self.rooms) >= settings.max_rooms:
+            raise EngineError("SERVER_AT_CAPACITY", "Too many rooms on this server right now, try again shortly")
         display_name = _validate_name(display_name)
         code = self._generate_code()
         config = RoomConfig(
@@ -57,7 +79,7 @@ class RoomManager:
         return room, player
 
     def get_room(self, code: str) -> Room:
-        room = self.rooms.get(code.upper())
+        room = self.rooms.get(_validate_code(code.upper() if isinstance(code, str) else code))
         if room is None:
             raise EngineError("ROOM_NOT_FOUND", "No room with that code exists")
         return room
@@ -84,9 +106,22 @@ class RoomManager:
         return room, player
 
     def rejoin_room(self, code: str, player_token: str) -> tuple[Room, Player]:
-        room = self.get_room(code)
+        # Deliberately reports PLAYER_NOT_FOUND for a missing *room* too.
+        # Rejoin needs no display name, so distinguishing "no such room" from
+        # "wrong token" would make this the cheapest room-code enumeration
+        # oracle in the app -- one request per code, no side effects. The
+        # frontend already discards the distinction (api/http.ts rejoinRoom
+        # swallows the error entirely).
+        try:
+            room = self.get_room(code)
+        except EngineError:
+            raise EngineError("PLAYER_NOT_FOUND", "That player token is not recognized in this room") from None
+        if not isinstance(player_token, str):
+            raise EngineError("PLAYER_NOT_FOUND", "That player token is not recognized in this room")
         for player in room.players.values():
-            if secrets.compare_digest(player.player_token, player_token):
+            # compare_digest rejects non-ASCII str outright (TypeError), so
+            # encode both sides rather than letting a unicode token 500.
+            if secrets.compare_digest(player.player_token.encode(), player_token.encode()):
                 return room, player
         raise EngineError("PLAYER_NOT_FOUND", "That player token is not recognized in this room")
 

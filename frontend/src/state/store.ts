@@ -25,9 +25,16 @@ export function useRoomConnection(roomCode: string | null): RoomConnection {
           setError(null)
         } else if (event.type === 'error') {
           setError(event.message)
+          // A rate-limited message is *dropped*, so no state_sync follows to
+          // clear the banner the way every other error path relies on.
+          // Expire it on a timer instead.
+          if (event.code === 'RATE_LIMITED' || event.code === 'MESSAGE_TOO_LARGE') {
+            window.setTimeout(() => setError(null), 4000)
+          }
         }
       },
       setConnected,
+      setError,
     )
     socketRef.current = socket
     socket.connect()
