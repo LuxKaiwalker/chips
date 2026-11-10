@@ -22,16 +22,12 @@ starts a single server on port 8000. Find your machine's LAN IP address
 player open `http://<that-ip>:8000` in their phone's browser. Everyone needs
 to be on the same WiFi network as the host machine.
 
-Set a real passphrase before playing for real (anyone who doesn't know it
-can't create or join a room):
-
-```
-export CHIPS_PASSPHRASE=yourpassword
-./run.sh
-```
-
-If you don't set one, the app falls back to `pokernight` and prints a loud
-warning on startup.
+**There is no access control.** Anyone who can reach the server can create
+a room, and anyone who knows (or guesses) a room's 6-digit code can take a
+seat in it and act on their turn. On your own WiFi that's the same trust
+model as leaving a chip rack on the table — everyone in reach is someone you
+invited. Don't expose this to the internet without putting real access
+control in front of it; see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 **Important limitation**: everything lives in memory. If the server process
 restarts (crash, `Ctrl-C`, machine reboot), every room and every stack is
@@ -77,22 +73,42 @@ Covers button/blind rotation (including heads-up rules), legal-action and
 min-raise validation (including the short-all-in-doesn't-reopen-betting
 rule), the main/side-pot split algorithm, fold-out auto-award, split-pot
 odd-chip distribution, room creation/join/rejoin, host-only config/seat-
-removal gating, the stale-room cleanup sweep, and the rate limiter.
+removal gating, the stale-room cleanup sweep, and the rate limiters.
 
-The app also rate-limits itself (`backend/app/rate_limit.py`) regardless
-of deployment mode: the passphrase endpoint specifically (the one
-brute-forceable secret in this app), plus a coarser general limit on room
-create/join/rejoin and new WebSocket connection attempts against simple
-request-flood abuse. This is independent of the extra, tighter rate
-limiting the public-deployment mode's nginx config adds on top — see
-[`DEPLOYMENT.md`](DEPLOYMENT.md).
+### Rate limiting
+
+The app rate-limits itself (`backend/app/rate_limit.py`, instances in
+`backend/app/limits.py`) in every deployment mode, independently of the
+extra limits the public-deployment mode's nginx config adds on top:
+
+| Scope | Limit | Why |
+| --- | --- | --- |
+| every `/api` route | 120/min per IP | flood backstop, applied router-wide so new endpoints are covered by default |
+| `POST /api/rooms` | 5/10min per IP | one room per game night; bounds room-creation floods |
+| `join` | 30/min per IP, +5 per failure | the room code is the only secret, so the failure penalty is what makes enumeration expensive |
+| `rejoin` + WS handshake | 90/min per IP, +5 per failure | one shared budget, or an attacker alternates between the two oracles |
+| WS connect | 30/10s per IP, 20 concurrent | a whole table reloading at once must still work |
+| WS messages | 15/5s then 60/10s per seat | every message broadcasts to the whole room, so one socket can amplify N-fold |
+
+Every per-IP number is sized for the *public* deployment, where the entire
+table shares one NAT address and so counts as a single key — not for one
+player per key. Resident rooms are capped by `MAX_ROOMS` (default 200). All
+of these are overridable by environment variable; see
+`backend/app/config.py`.
+
+Per-IP limiting is defeated by a botnet at every layer. What actually
+protects a game is the combination of the failed-lookup penalty, the short
+room lifetime (`cleanup.py` sweeps empty rooms after 10 minutes) and the
+10^6 room-code space — not the rate limits alone.
 
 ## How a game works
 
 1. One person creates a room (sets blinds + starting stack) and shares the
    6-digit room code. Everyone else joins with that code and a name.
-2. Any player can hit **Start Hand** once there are 2+ players. The app
-   tracks the dealer button, blinds, and whose turn it is to act.
+2. The dealer hits **Start Hand** once there are 2+ players. The app
+   tracks the dealer button, blinds, and whose turn it is to act. "Dealer"
+   is the host by default, or the current button holder when the room's
+   `rotate_dealer` option is on.
 3. The app never shows card values — it shows a status like "Dealing the
    Flop — 3 community cards" so the table stays in sync with whoever is
    physically dealing the real deck.
@@ -100,16 +116,24 @@ limiting the public-deployment mode's nginx config adds on top — see
    presets and a slider, clamped to the legal min-raise/all-in range by the
    server.
 5. If everyone folds but one player, they win automatically — no further
-   input needed. If 2+ players reach showdown, anyone still in the hand can
-   mark who won each pot (main pot and any side pots are tracked
-   separately, with correct eligible-winner sets for all-in situations).
+   input needed. If 2+ players reach showdown, the dealer marks who won
+   each pot (main pot and any side pots are tracked separately, with
+   correct eligible-winner sets for all-in situations). One designated
+   arbiter rather than any player, the same way a real dealer pushes the
+   chips — including when they folded their own hand.
 6. A player who busts to 0 chips can rebuy between hands, self-declared,
    same as buying more chips from the rack in a real game.
 
-The host only has two narrow powers: editing blinds/stack before the first
-hand, and removing a seat that's been disconnected for 5+ minutes (and only
-between hands). Everything else — starting hands, acting, declaring
-winners — is identical for every player, including the host.
+The host (seat 1, whoever created the room) can edit blinds/stack before
+the first hand, and remove a seat that's been disconnected for 5+ minutes
+(only between hands). The host is also the default dealer, so unless
+`rotate_dealer` is on they're the one who starts hands and declares
+showdown winners. Acting on your own turn, rebuying and sitting out are
+identical for every player.
+
+Note that the host role is positional and permanent: it never transfers. If
+seat 1 leaves a room with `rotate_dealer` off, nobody can start another
+hand.
 
 ## Roadmap (explicitly out of scope for now)
 

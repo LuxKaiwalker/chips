@@ -44,23 +44,25 @@ Two real differences from the LAN quick-start mode:
    the nginx layer (`deploy/nginx-chips.conf`), not in the app itself.
    This is the one thing that's genuinely nginx-only; rate limiting (next
    point) isn't.
-2. **The passphrase is now internet-brute-forceable.** On your own WiFi,
-   an attacker needs to already be on your network. Reachable from the
-   whole internet, that's no longer true. Rate limiting on
-   `/api/auth/passphrase` exists at *two* independent layers: nginx
-   (`deploy/nginx-chips.conf`, ~6 attempts/min/IP) in this public mode,
-   and the app itself (`backend/app/rate_limit.py`, 10 attempts/min/IP) in
-   *every* mode, including the plain LAN quick-start -- the app-level one
-   exists specifically so the LAN mode, which has no nginx in front of it
-   at all, isn't left with zero brute-force protection. The app also
-   coarsely rate-limits room create/join/rejoin and new WebSocket
-   connection attempts (not in-game message traffic) against simple
-   request-flood abuse, independent of nginx. **You should still pick a
-   real, non-trivial passphrase** (not the `pokernight` default) before
-   going live -- rate limiting slows brute force, it doesn't make a weak
-   passphrase safe. `scripts/run-prod.sh` refuses to start without
-   `CHIPS_PASSPHRASE` set, specifically to catch
-   this.
+2. **The app has no authentication at all, and this makes it public.**
+   On your own WiFi an attacker has to already be on your network. Reachable
+   from the whole internet, anyone who finds the URL can create rooms, and
+   anyone who learns or guesses a room's 6-digit code can take a seat at
+   that table, act on its turns, and rebuy arbitrary chips. There is no
+   credential to get wrong.
+
+   What stands between a stranger and your game is: the 10^6 room-code
+   space, the fact that rooms are swept 10 minutes after the last player
+   leaves, and layered rate limiting with a penalty on failed lookups
+   (nginx zones here, plus the app's own tighter limits in
+   `backend/app/limits.py` -- the app-level ones exist so the plain LAN
+   quick-start mode, which has no nginx at all, isn't left unprotected).
+   Together those make enumeration take months per code space. None of it
+   helps against a botnet, which defeats per-IP limiting at every layer.
+
+   **If you want this on the internet but not open to it, add real access
+   control at the nginx layer** -- Cloudflare Access, mTLS, or an
+   `auth_request` subrequest. There is nothing in the app to fall back on.
 
 Everything else -- the in-memory-only game state, the trust-based
 showdown, the equal-information design -- is unchanged.
@@ -127,15 +129,15 @@ the closure builds, not that a service actually runs once activated.
    (`systemd.services.chips-backend`, already in
    `deploy/local/configuration.nix.full` from step 1 above) -- it starts
    at boot and restarts on failure, matching membase's own always-on
-   presence on this machine. It reads `CHIPS_PASSPHRASE` from
-   `/etc/chips-backend.env` rather than `configuration.nix` itself, since
-   that file is world-readable (0644) and a real passphrase has no
-   business sitting in it in plaintext. Create that file once, before
-   `nixos-rebuild switch` in step 3 (systemd will otherwise fail to start
-   the service with a missing-EnvironmentFile error):
+   presence on this machine. It reads an `EnvironmentFile` at
+   `/etc/chips-backend.env`. There is no secret to keep there any more, but
+   the unit still references the file, so create it (empty is fine) before
+   `nixos-rebuild switch` in step 3 or systemd fails to start the service
+   with a missing-EnvironmentFile error. It's also where the `MAX_ROOMS` /
+   `RL_*` tuning knobs from `backend/app/config.py` belong if you want to
+   override any of them:
    ```
    sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
-   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
    ```
    If you were running `scripts/run-prod.sh` manually/in a foreground
    shell to test earlier, stop that process first -- it's bound to the
@@ -173,8 +175,8 @@ just installed with `systemctl enable` directly instead of declared in
 `deploy/*.conf` / `deploy/*.yml` / `deploy/*.service` / `deploy/chips.nix`
 (no `local/`) are generic templates kept for reference/reuse -- not what's
 actually installed. Your real, filled-in copies live under `deploy/local/`,
-which `.gitignore` excludes entirely, so the real hostnames/tunnel
-ID/passphrase never touch a tracked file.
+which `.gitignore` excludes entirely, so the real hostnames and tunnel ID
+never touch a tracked file.
 
 ### 3. Frontend: GitHub Pages
 
@@ -209,8 +211,9 @@ subpath, which is what you'd get on the default `github.io` URL instead).
 
 ## Deployment checklist
 
-1. Set a real `CHIPS_PASSPHRASE` -- `scripts/run-prod.sh` won't start
-   without one, but double check it's not something guessable.
+1. Decide whether you are genuinely willing to run this open to the
+   internet, or whether you want access control in front of it (see the
+   warning above). The app provides none.
 2. Confirm `scripts/run-prod.sh` binds `127.0.0.1` only -- **never**
    change this to `0.0.0.0`. nginx (itself only listening on
    `127.0.0.1:8080`, reached only via `cloudflared`'s local connection) is

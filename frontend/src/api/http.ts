@@ -4,7 +4,6 @@
 // domain -- see DEPLOYMENT.md.
 export const API_BASE = (import.meta.env.VITE_API_BASE ?? '').replace(/\/$/, '')
 
-const SESSION_TOKEN_KEY = 'chips_session_token'
 const LAST_ROOM_KEY = 'chips_last_room_code'
 
 export function getLastRoomCode(): string | null {
@@ -17,18 +16,6 @@ export function setLastRoomCode(code: string): void {
 
 export function clearLastRoomCode(): void {
   localStorage.removeItem(LAST_ROOM_KEY)
-}
-
-export function getSessionToken(): string | null {
-  return localStorage.getItem(SESSION_TOKEN_KEY)
-}
-
-export function setSessionToken(token: string): void {
-  localStorage.setItem(SESSION_TOKEN_KEY, token)
-}
-
-export function clearSessionToken(): void {
-  localStorage.removeItem(SESSION_TOKEN_KEY)
 }
 
 export function playerTokenKey(roomCode: string): string {
@@ -64,12 +51,8 @@ function throttleMessage(status: number, retryAfter?: number): string {
   return status === 503 ? `The server is at capacity.${wait}` : `Too many requests.${wait}`
 }
 
-async function request(path: string, body?: unknown, auth = true): Promise<any> {
+async function request(path: string, body?: unknown): Promise<any> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (auth) {
-    const token = getSessionToken()
-    if (token) headers['X-Session-Token'] = token
-  }
   const res = await fetch(`${API_BASE}/api${path}`, {
     method: 'POST',
     headers,
@@ -91,21 +74,9 @@ async function request(path: string, body?: unknown, auth = true): Promise<any> 
         retryAfter,
       )
     }
-    // Session tokens live only in the backend's process memory (see
-    // README's "in-memory only" limitation) -- any backend restart
-    // silently invalidates every outstanding token. Without this, a
-    // stale token in localStorage would permanently skip the passphrase
-    // gate while every real request kept failing with no way to recover
-    // short of manually clearing storage.
-    if (res.status === 401) clearSessionToken()
     throw new ApiError(data.message || data.detail || 'Request failed', data.code, res.status)
   }
   return data
-}
-
-export async function submitPassphrase(passphrase: string): Promise<void> {
-  const data = await request('/auth/passphrase', { passphrase }, false)
-  setSessionToken(data.session_token)
 }
 
 export async function createRoom(params: {

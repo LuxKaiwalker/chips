@@ -17,10 +17,8 @@ if [ ! -d backend/.venv ]; then
   backend/.venv/bin/pip install --quiet -r backend/requirements.txt
 fi
 
-if [ -z "${CHIPS_PASSPHRASE:-}" ]; then
-  echo "WARNING: CHIPS_PASSPHRASE is not set, using the default 'pokernight' passphrase."
-  echo "Set it with: export CHIPS_PASSPHRASE=yourpassword"
-fi
+echo "NOTE: this app has no access control. Anyone who can reach it can"
+echo "create a room, and anyone who knows a room code can take a seat."
 
 echo
 echo "Starting server on port 8000..."

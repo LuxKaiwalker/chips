@@ -1,13 +1,11 @@
-import { API_BASE, clearLastRoomCode, clearSessionToken, getPlayerToken, getSessionToken } from './http'
+import { API_BASE, clearLastRoomCode, getPlayerToken } from './http'
 
-// Matches ws_router.py's close codes: 4401 = invalid/expired session
-// token, 4404 = room or player not found (e.g. a stale room after a
-// backend restart, which wipes all in-memory rooms). Neither is worth
-// retrying with the same credentials -- see the onclose handler below.
-// 4429 = rate limited, which *is* worth retrying, just much later; the
-// close `reason` carries the server's retry hint in seconds (a WebSocket
-// close has no headers, so that's the only channel for it).
-const CLOSE_INVALID_SESSION = 4401
+// Matches ws_router.py's close codes: 4404 = room or player not found
+// (e.g. a stale room after a backend restart, which wipes all in-memory
+// rooms), not worth retrying with the same player token -- see the onclose
+// handler below. 4429 = rate limited, which *is* worth retrying, just much
+// later; the close `reason` carries the server's retry hint in seconds (a
+// WebSocket close has no headers, so that's the only channel for it).
 const CLOSE_ROOM_NOT_FOUND = 4404
 const CLOSE_RATE_LIMITED = 4429
 
@@ -46,7 +44,6 @@ export class RoomSocket {
 
   connect(): void {
     this.closedByUser = false
-    const sessionToken = getSessionToken()
     const playerToken = getPlayerToken(this.roomCode)
     // Same-origin by default; when API_BASE points at a separately-hosted
     // backend (see DEPLOYMENT.md), derive the ws(s) origin from it instead.
@@ -57,9 +54,7 @@ export class RoomSocket {
     } else {
       wsOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
     }
-    const url = `${wsOrigin}/ws/${this.roomCode}?session_token=${encodeURIComponent(
-      sessionToken ?? '',
-    )}&player_token=${encodeURIComponent(playerToken ?? '')}`
+    const url = `${wsOrigin}/ws/${this.roomCode}?player_token=${encodeURIComponent(playerToken ?? '')}`
     const ws = new WebSocket(url)
     this.ws = ws
 
@@ -91,21 +86,10 @@ export class RoomSocket {
       this.onConnectionChange(false)
       if (this.heartbeat) window.clearInterval(this.heartbeat)
 
-      if (ev.code === CLOSE_INVALID_SESSION) {
-        // Retrying would just fail the same way forever -- the session
-        // token is gone (backend restarted; session store is in-memory
-        // only). Clear it and reload so App.tsx's boot logic lands back
-        // on the passphrase gate instead of a silently-stuck "Connecting…"
-        // screen.
-        clearSessionToken()
-        clearLastRoomCode()
-        window.location.reload()
-        return
-      }
       if (ev.code === CLOSE_ROOM_NOT_FOUND) {
-        // The room itself (or this player's seat) is gone -- same backend
-        // restart story, but the session may still be valid. Drop back to
-        // Home instead of retrying a room that no longer exists.
+        // The room itself (or this player's seat) is gone -- the backend
+        // restarted and its in-memory rooms went with it. Drop back to Home
+        // instead of retrying a room that no longer exists.
         clearLastRoomCode()
         window.location.reload()
         return

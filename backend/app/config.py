@@ -8,11 +8,6 @@ def _env_int(name: str, default: int) -> int:
 
 
 class Settings:
-    passphrase: str = os.environ.get("CHIPS_PASSPHRASE", "pokernight")
-    passphrase_is_default: bool = "CHIPS_PASSPHRASE" not in os.environ
-
-    session_token_ttl_hours: int = _env_int("SESSION_TOKEN_TTL_HOURS", 24)
-
     max_seats: int = _env_int("MAX_SEATS", 10)
     # Digits only, 6 long -- easier to read aloud/type on a phone keypad
     # than a mixed alphanumeric code, at the cost of a smaller code space

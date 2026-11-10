@@ -22,11 +22,8 @@ from app.main import app
 def seated():
     """A client plus a room with one seated player, ready to open a socket."""
     client = TestClient(app)
-    r = client.post("/api/auth/passphrase", json={"passphrase": settings.passphrase})
-    session = r.json()["session_token"]
-    headers = {"X-Session-Token": session}
-    created = client.post("/api/rooms", json={"display_name": "Ada"}, headers=headers).json()
-    url = f"/ws/{created['room_code']}?session_token={session}&player_token={created['player_token']}"
+    created = client.post("/api/rooms", json={"display_name": "Ada"}).json()
+    url = f"/ws/{created['room_code']}?player_token={created['player_token']}"
     return client, url
 
 

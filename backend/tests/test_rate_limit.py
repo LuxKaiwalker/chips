@@ -8,12 +8,6 @@ from app.main import app
 from app.rate_limit import KeyedLimiter
 
 
-def _auth(client: TestClient) -> dict[str, str]:
-    r = client.post("/api/auth/passphrase", json={"passphrase": settings.passphrase})
-    assert r.status_code == 200
-    return {"X-Session-Token": r.json()["session_token"]}
-
-
 # --- the limiter primitive ---------------------------------------------------
 
 
@@ -103,11 +97,10 @@ def test_max_keys_cap_evicts_least_recently_used():
 def test_create_room_rate_limited_with_retry_after(monkeypatch):
     monkeypatch.setattr(limits.create_room, "max_hits", 2)
     client = TestClient(app)
-    headers = _auth(client)
     body = {"display_name": "Ada"}
     for _ in range(2):
-        assert client.post("/api/rooms", json=body, headers=headers).status_code == 200
-    r = client.post("/api/rooms", json=body, headers=headers)
+        assert client.post("/api/rooms", json=body).status_code == 200
+    r = client.post("/api/rooms", json=body)
     assert r.status_code == 429
     assert int(r.headers["Retry-After"]) >= 1
 
@@ -118,29 +111,27 @@ def test_failed_join_costs_more_than_a_successful_one(monkeypatch):
     monkeypatch.setattr(limits.join, "max_hits", 12)
     monkeypatch.setattr(settings, "failed_lookup_penalty", 5)
     client = TestClient(app)
-    headers = _auth(client)
 
-    created = client.post("/api/rooms", json={"display_name": "Host"}, headers=headers).json()
+    created = client.post("/api/rooms", json={"display_name": "Host"}).json()
     code = created["room_code"]
 
     # Five successful joins cost 5 of 12.
     for i in range(5):
-        r = client.post(f"/api/rooms/{code}/join", json={"display_name": f"P{i}"}, headers=headers)
+        r = client.post(f"/api/rooms/{code}/join", json={"display_name": f"P{i}"})
         assert r.status_code == 200
     # One miss costs 1 + 5 = 6, taking the total to 11.
-    assert client.post("/api/rooms/000000/join", json={"display_name": "x"}, headers=headers).status_code == 404
+    assert client.post("/api/rooms/000000/join", json={"display_name": "x"}).status_code == 404
     # The next request is the 12th and still allowed; the one after is not.
-    assert client.post(f"/api/rooms/{code}/join", json={"display_name": "P9"}, headers=headers).status_code == 200
-    assert client.post(f"/api/rooms/{code}/join", json={"display_name": "P10"}, headers=headers).status_code == 429
+    assert client.post(f"/api/rooms/{code}/join", json={"display_name": "P9"}).status_code == 200
+    assert client.post(f"/api/rooms/{code}/join", json={"display_name": "P10"}).status_code == 429
 
 
 def test_room_cap_returns_503_with_retry_after(monkeypatch):
     monkeypatch.setattr(settings, "max_rooms", 1)
     monkeypatch.setattr(limits.create_room, "max_hits", 10)
     client = TestClient(app)
-    headers = _auth(client)
-    assert client.post("/api/rooms", json={"display_name": "Ada"}, headers=headers).status_code == 200
-    r = client.post("/api/rooms", json={"display_name": "Bob"}, headers=headers)
+    assert client.post("/api/rooms", json={"display_name": "Ada"}).status_code == 200
+    r = client.post("/api/rooms", json={"display_name": "Bob"})
     assert r.status_code == 503
     assert r.json()["code"] == "SERVER_AT_CAPACITY"
     assert int(r.headers["Retry-After"]) >= 1
@@ -159,11 +150,10 @@ def test_health_is_covered_by_the_router_backstop(monkeypatch):
 def test_rejoin_does_not_reveal_whether_a_room_exists(monkeypatch):
     monkeypatch.setattr(limits.lookup, "max_hits", 50)
     client = TestClient(app)
-    headers = _auth(client)
-    code = client.post("/api/rooms", json={"display_name": "Host"}, headers=headers).json()["room_code"]
+    code = client.post("/api/rooms", json={"display_name": "Host"}).json()["room_code"]
 
-    unknown_room = client.post("/api/rooms/000000/rejoin", json={"player_token": "nope"}, headers=headers)
-    bad_token = client.post(f"/api/rooms/{code}/rejoin", json={"player_token": "nope"}, headers=headers)
+    unknown_room = client.post("/api/rooms/000000/rejoin", json={"player_token": "nope"})
+    bad_token = client.post(f"/api/rooms/{code}/rejoin", json={"player_token": "nope"})
 
     assert unknown_room.status_code == bad_token.status_code == 404
     assert unknown_room.json() == bad_token.json()
@@ -172,7 +162,6 @@ def test_rejoin_does_not_reveal_whether_a_room_exists(monkeypatch):
 def test_malformed_room_code_is_not_a_cheaper_probe(monkeypatch):
     monkeypatch.setattr(limits.join, "max_hits", 50)
     client = TestClient(app)
-    headers = _auth(client)
-    r = client.post("/api/rooms/not-a-code/join", json={"display_name": "x"}, headers=headers)
+    r = client.post("/api/rooms/not-a-code/join", json={"display_name": "x"})
     assert r.status_code == 404
     assert r.json()["code"] == "ROOM_NOT_FOUND"

@@ -19,19 +19,17 @@
 # `enable`/`credentialsFile`/`default` are presumably already declared
 # wherever that existing tunnel is set up.
 #
-# CHIPS_PASSPHRASE is read from an EnvironmentFile, not declared here --
-# configuration.nix is typically world-readable, so a real secret has no
-# business living in it in plaintext. Create the file with:
-#   sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
-#   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
+# NOTE: this app has no authentication. Anyone who can reach the hostname
+# below can create a room, and anyone who knows a room code can take a seat
+# in it. If that isn't what you want, put real access control in front of it
+# here (Cloudflare Access, mTLS, auth_request) -- there is nothing in the app
+# to fall back on.
 
 { config, pkgs, ... }:
 
 {
   services.nginx.appendHttpConfig = ''
     limit_req_zone $binary_remote_addr zone=chips_general:10m rate=10r/s;
-    # ~1 attempt per 10s/IP -- the one brute-forceable secret in this app.
-    limit_req_zone $binary_remote_addr zone=chips_auth:10m rate=6r/m;
     # Room create/join/rejoin. A whole table shares one NAT address here, so
     # these are per-table allowances. The app enforces its own tighter,
     # failure-penalised versions -- see backend/app/limits.py.
@@ -49,26 +47,6 @@
       real_ip_header CF-Connecting-IP;
       client_max_body_size 1m;
     '';
-    locations."= /api/auth/passphrase" = {
-      proxyPass = "http://127.0.0.1:8001";
-      extraConfig = ''
-        limit_req zone=chips_auth burst=2 nodelay;
-
-        add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
-        add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type" always;
-        add_header Access-Control-Max-Age 600 always;
-
-        if ($request_method = OPTIONS) {
-          return 204;
-        }
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto https;
-      '';
-    };
     # Separate blocks rather than one, because add_header is not inherited
     # between sibling locations -- each needs its own CORS headers and
     # OPTIONS short-circuit. Precedence: exact `=` beats regex beats the `/`
@@ -80,7 +58,7 @@
 
         add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
         add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type, X-Session-Token" always;
+        add_header Access-Control-Allow-Headers "Content-Type" always;
         add_header Access-Control-Max-Age 600 always;
 
         if ($request_method = OPTIONS) {
@@ -100,7 +78,7 @@
 
         add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
         add_header Access-Control-Allow-Methods "POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type, X-Session-Token" always;
+        add_header Access-Control-Allow-Headers "Content-Type" always;
         add_header Access-Control-Max-Age 600 always;
 
         if ($request_method = OPTIONS) {
@@ -121,7 +99,7 @@
 
         add_header Access-Control-Allow-Origin "https://your-chips-frontend.example.com" always;
         add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
-        add_header Access-Control-Allow-Headers "Content-Type, X-Session-Token" always;
+        add_header Access-Control-Allow-Headers "Content-Type" always;
         add_header Access-Control-Max-Age 600 always;
 
         if ($request_method = OPTIONS) {
@@ -140,14 +118,11 @@
     "http://127.0.0.1:8080";
 
   # Runs the chips backend itself persistently, starting at boot.
-  # CHIPS_PASSPHRASE comes from /etc/chips-backend.env (root:root, mode
-  # 600), NOT from configuration.nix -- that file is world-readable
-  # (0644), so the real passphrase has no business living there in
-  # plaintext. systemd reads EnvironmentFile as root before dropping to
-  # User below, so the vincent user never needs read access to it either.
-  # Create it with:
+  # The EnvironmentFile below is optional now that there is no passphrase to
+  # keep out of this world-readable file; it is kept as the place to put any
+  # of the MAX_ROOMS / RL_* tuning knobs from backend/app/config.py. Create
+  # it (or drop the line) with:
   #   sudo install -m 600 -o root -g root /dev/null /etc/chips-backend.env
-  #   echo 'CHIPS_PASSPHRASE=yourrealpassphrase' | sudo tee /etc/chips-backend.env
   systemd.services.chips-backend = {
     description = "Chips backend (poker chip/pot tracker)";
     after = [ "network.target" ];

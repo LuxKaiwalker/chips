@@ -15,12 +15,10 @@ logger = logging.getLogger("chips")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.passphrase_is_default:
-        logger.warning(
-            "CHIPS_PASSPHRASE is not set — using the default passphrase %r. "
-            "Set CHIPS_PASSPHRASE before a real game.",
-            settings.passphrase,
-        )
+    logger.warning(
+        "This app has no access control: anyone who can reach it can create a "
+        "room, and anyone who knows or guesses a room code can take a seat."
+    )
     task = asyncio.create_task(cleanup_loop())
     yield
     task.cancel()

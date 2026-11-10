@@ -3,11 +3,9 @@ import { ApiError, createRoom, joinRoom } from '../api/http'
 
 export function Home({
   onEnterRoom,
-  onUnauthorized,
   initialJoinCode,
 }: {
   onEnterRoom: (code: string) => void
-  onUnauthorized: () => void
   initialJoinCode?: string | null
 }) {
   const [mode, setMode] = useState<'create' | 'join'>(initialJoinCode ? 'join' : 'create')
@@ -35,14 +33,6 @@ export function Home({
       })
       onEnterRoom(res.room_code)
     } catch (err) {
-      // A 401 here means the stored passphrase session expired (the
-      // backend's session store is in-memory and doesn't survive a
-      // restart) -- bounce back to the gate instead of showing a
-      // confusing "unauthorized" banner on the room-creation form.
-      if (err instanceof ApiError && err.status === 401) {
-        onUnauthorized()
-        return
-      }
       setError(err instanceof ApiError ? err.message : 'Could not create room')
     } finally {
       setBusy(false)
@@ -57,10 +47,6 @@ export function Home({
       const res = await joinRoom(joinCode.trim(), displayName)
       onEnterRoom(res.room_code)
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        onUnauthorized()
-        return
-      }
       setError(err instanceof ApiError ? err.message : 'Could not join room')
     } finally {
       setBusy(false)

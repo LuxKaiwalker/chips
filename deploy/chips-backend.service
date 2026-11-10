@@ -2,7 +2,7 @@
 # behind nginx + Cloudflare Tunnel -- see DEPLOYMENT.md.
 #
 # Install: copy to /etc/systemd/system/chips-backend.service, fill in
-# WorkingDirectory and CHIPS_PASSPHRASE below, then:
+# WorkingDirectory below, then:
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now chips-backend
 #
@@ -21,7 +21,6 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/REPLACE/WITH/PATH/TO/chips
-Environment=CHIPS_PASSPHRASE=REPLACE_WITH_A_REAL_PASSPHRASE
 Environment=CHIPS_PORT=8000
 ExecStart=/REPLACE/WITH/PATH/TO/chips/scripts/run-prod.sh
 Restart=on-failure

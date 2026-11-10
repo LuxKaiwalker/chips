@@ -1,19 +1,10 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from app import limits
-from app.auth import check_passphrase, require_session_token
 from app.config import settings
 from app.engine import EngineError
 from app.rate_limit import KeyedLimiter, client_ip
 from app.rooms import room_manager
-
-# ~1 attempt per 6s/IP, small burst -- generous for a mistyped passphrase,
-# far too slow to brute-force even a short one. Exists independently of
-# nginx's own (tighter) limit in the public-deployment mode (see
-# DEPLOYMENT.md) specifically so the plain LAN quick-start mode, which has
-# no nginx in front of it at all, isn't left with zero protection on the
-# one brute-forceable secret in this app.
-_passphrase_limiter = KeyedLimiter(max_hits=10, window_seconds=60, name="passphrase")
 
 
 def _enforce(limiter: KeyedLimiter, detail: str):
@@ -40,7 +31,6 @@ _global_dep = _enforce(limits.rest_global, "Too many requests, slow down")
 _create_dep = _enforce(limits.create_room, "Too many rooms created, try again later")
 _join_dep = _enforce(limits.join, "Too many join attempts, try again later")
 _lookup_dep = _enforce(limits.lookup, "Too many requests, try again later")
-_passphrase_dep = _enforce(_passphrase_limiter, "Too many attempts, try again later")
 
 # Router-level dependency, so every current *and future* endpoint under /api
 # gets a flood backstop without anyone having to remember to add one. The
@@ -53,16 +43,9 @@ async def health():
     return {"ok": True}
 
 
-@router.post("/auth/passphrase")
-async def auth_passphrase(body: dict = Body(...), _rl: None = Depends(_passphrase_dep)):
-    token = check_passphrase(body.get("passphrase", ""))
-    return {"session_token": token}
-
-
 @router.post("/rooms")
 async def create_room(
     body: dict = Body(...),
-    _session: str = Depends(require_session_token),
     _rl: None = Depends(_create_dep),
 ):
     try:
@@ -84,7 +67,6 @@ async def join_room(
     code: str,
     request: Request,
     body: dict = Body(...),
-    _session: str = Depends(require_session_token),
     _rl: None = Depends(_join_dep),
 ):
     try:
@@ -100,7 +82,6 @@ async def rejoin_room(
     code: str,
     request: Request,
     body: dict = Body(...),
-    _session: str = Depends(require_session_token),
     _rl: None = Depends(_lookup_dep),
 ):
     try:

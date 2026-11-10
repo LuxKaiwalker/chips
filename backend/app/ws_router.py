@@ -4,7 +4,6 @@ import time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app import limits
-from app.auth import is_valid_session_token
 from app.config import settings
 from app.engine import EngineError
 from app.engine.state_machine import (
@@ -30,7 +29,7 @@ _ws_conns_by_ip: dict[str, int] = {}
 
 
 @router.websocket("/ws/{room_code}")
-async def room_socket(ws: WebSocket, room_code: str, session_token: str = "", player_token: str = ""):
+async def room_socket(ws: WebSocket, room_code: str, player_token: str = ""):
     # Uvicorn's websockets protocol implementation hardcodes a plain HTTP
     # 403 (discarding whatever custom `code` is passed) if the app calls
     # ws.close() *before* ws.accept() -- confirmed by reading
@@ -47,11 +46,6 @@ async def room_socket(ws: WebSocket, room_code: str, session_token: str = "", pl
 
     if _ws_conns_by_ip.get(ip, 0) >= settings.max_ws_connections_per_ip:
         await _reject(ws, 4429, 30)
-        return
-
-    if not is_valid_session_token(session_token):
-        await ws.accept()
-        await ws.close(code=4401)
         return
 
     # Shared with POST /rooms/{code}/rejoin: both resolve a room code, so

@@ -25,12 +25,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if [ -z "${CHIPS_PASSPHRASE:-}" ]; then
-  echo "ERROR: CHIPS_PASSPHRASE must be set before running in public-deployment mode." >&2
-  echo "The default passphrase is not acceptable once this is reachable from the internet." >&2
-  exit 1
-fi
-
 if [ ! -d backend/.venv ]; then
   echo "Creating backend virtualenv..."
   python3 -m venv backend/.venv

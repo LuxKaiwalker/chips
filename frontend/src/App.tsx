@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { clearLastRoomCode, clearPlayerToken, getLastRoomCode, getSessionToken, rejoinRoom } from './api/http'
-import { PassphraseGate } from './pages/PassphraseGate'
+import { clearLastRoomCode, clearPlayerToken, getLastRoomCode, rejoinRoom } from './api/http'
 import { Home } from './pages/Home'
 import { Lobby } from './pages/Lobby'
 import { Table } from './pages/Table'
 import { useRoomConnection } from './state/store'
 
-type Stage = 'checking' | 'gate' | 'home' | 'room'
+type Stage = 'checking' | 'home' | 'room'
 
 function App() {
   const [stage, setStage] = useState<Stage>('checking')
@@ -22,10 +21,6 @@ function App() {
 
   useEffect(() => {
     async function boot() {
-      if (!getSessionToken()) {
-        setStage('gate')
-        return
-      }
       const lastCode = getLastRoomCode()
       if (lastCode) {
         const rejoined = await rejoinRoom(lastCode)
@@ -36,20 +31,12 @@ function App() {
           return
         }
       }
-      // rejoinRoom (via request()) clears the stored session token itself
-      // if the attempt above failed with 401 -- re-check rather than
-      // assuming 'home' is still correct, or a stale token would silently
-      // skip the passphrase gate forever after any backend restart.
-      setStage(getSessionToken() ? 'home' : 'gate')
+      setStage('home')
     }
     boot()
   }, [])
 
   if (stage === 'checking') return null
-
-  if (stage === 'gate') {
-    return <PassphraseGate onSuccess={() => setStage('home')} />
-  }
 
   if (stage === 'home' || !roomCode || mySeatId === null) {
     return (
@@ -65,7 +52,6 @@ function App() {
             }
           })
         }}
-        onUnauthorized={() => setStage('gate')}
         initialJoinCode={deepLinkJoinCode}
       />
     )
