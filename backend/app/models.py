@@ -120,8 +120,11 @@ def current_dealer_seat(room: Room) -> int:
     Always the host unless config.rotate_dealer is on, in which case it's
     whoever currently holds the dealer button -- reusing the existing
     per-hand button rotation rather than a separate rotation mechanism.
-    Falls back to the host before the first hand (there's no button yet).
+    Falls back to the host before the first hand (there's no button yet),
+    and also if the button holder is no longer seated (they left or were
+    kicked between hands) -- otherwise the "who may start the next hand"
+    check would point at a seat that doesn't exist and nobody could start.
     """
-    if room.config.rotate_dealer and room.hand is not None:
+    if room.config.rotate_dealer and room.hand is not None and room.hand.button_seat in room.players:
         return room.hand.button_seat
     return room.host_seat_id

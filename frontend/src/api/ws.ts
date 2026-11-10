@@ -1,16 +1,22 @@
-import { API_BASE, clearLastRoomCode, getPlayerToken } from './http'
+import { API_BASE, clearLastRoomCode, clearPlayerToken, getPlayerToken } from './http'
 
 // Matches ws_router.py's close codes. 4401 = no usable auth frame arrived
 // (a client bug or a dropped first message -- an ordinary retry is right).
-// 4404 = room or player not found (e.g. a stale room after a backend
-// restart, which wipes all in-memory rooms), not worth retrying with the
-// same player token -- see the onclose handler below. 4429 = rate limited,
-// which *is* worth retrying, just much later; the close `reason` carries
-// the server's retry hint in seconds (a WebSocket close has no headers, so
-// that's the only channel for it).
+// 4403 = kicked by the host -- leave, don't retry. 4404 = room or player
+// not found (e.g. a stale room after a backend restart, which wipes all
+// in-memory rooms), not worth retrying with the same player token -- see
+// the onclose handler below. 4429 = rate limited, which *is* worth
+// retrying, just much later; the close `reason` carries the server's retry
+// hint in seconds (a WebSocket close has no headers, so that's the only
+// channel for it).
 const CLOSE_UNAUTHENTICATED = 4401
+const CLOSE_KICKED = 4403
 const CLOSE_ROOM_NOT_FOUND = 4404
 const CLOSE_RATE_LIMITED = 4429
+
+// One-shot flag read by Home after the reload a kick triggers, so the user
+// is told why they landed back on the join screen.
+export const KICKED_FLAG = 'chips_kicked'
 
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
@@ -101,6 +107,21 @@ export class RoomSocket {
         // The auth frame never landed. The token itself is probably fine,
         // so just retry rather than tearing down stored state.
         this.onNotice('Connection handshake failed — retrying.')
+      }
+      if (ev.code === CLOSE_KICKED) {
+        // Removed by the host. Forget this seat so boot doesn't try to
+        // rejoin it, flag the reason for Home to show, and drop out.
+        this.closedByUser = true
+        clearPlayerToken(this.roomCode)
+        clearLastRoomCode()
+        try {
+          sessionStorage.setItem(KICKED_FLAG, '1')
+        } catch {
+          // sessionStorage can be unavailable (private mode); the reload
+          // still gets the user out, just without the explanatory banner.
+        }
+        window.location.reload()
+        return
       }
       if (ev.code === CLOSE_ROOM_NOT_FOUND) {
         // The room itself (or this player's seat) is gone -- the backend

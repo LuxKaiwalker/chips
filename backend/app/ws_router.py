@@ -140,15 +140,30 @@ async def _receive_loop(ws: WebSocket, room, seat_id: int) -> None:
     msg_key = limits.message_key(room.code, seat_id)
 
     while True:
-        # receive_text() rather than receive_json() so the cheap checks
-        # below run *before* paying for a parse, and so a non-JSON frame
-        # is an error message rather than an unhandled JSONDecodeError
-        # that tears the connection down.
-        raw = await ws.receive_text()
+        # ws.receive() rather than ws.receive_text() so a *binary* frame is
+        # handled gracefully: receive_text() raises on a bytes frame (it has
+        # no "text" key), and that exception isn't a WebSocketDisconnect, so
+        # it would escape this loop and drop the socket with a bare 1006.
+        # Taking the raw ASGI message lets us rate-limit every frame and
+        # answer a non-text one with BAD_REQUEST, mirroring the malformed-
+        # JSON path below.
+        message = await ws.receive()
+        if message["type"] == "websocket.disconnect":
+            raise WebSocketDisconnect(message.get("code", 1000))
 
+        # Rate-limit every frame, text or binary, before doing any work.
         if not limits.ws_message_hard.allow(msg_key):
             await ws.close(code=4429, reason=str(limits.ws_message_hard.retry_after(msg_key)))
             return
+
+        raw = message.get("text")
+        if raw is None:
+            # A binary frame (or an empty one). Charge it against the soft
+            # limiter too so it can't be a cheaper flood than text, then
+            # reject it.
+            limits.ws_message.allow(msg_key)
+            await connection_manager.send_error(room.code, seat_id, "BAD_REQUEST", "Text frames only")
+            continue
 
         if len(raw) > settings.ws_max_message_bytes:
             await connection_manager.send_error(
@@ -226,6 +241,13 @@ async def _handle_message(room, seat_id: int, msg: dict) -> None:
             toggle_sit_out(room, seat_id)
         elif msg_type == "remove_stale_seat":
             room_manager.remove_stale_seat(room, seat_id, int(msg["seat_id"]))
+        elif msg_type == "kick":
+            target = int(msg["seat_id"])
+            room_manager.kick_seat(room, seat_id, target)
+            # 4403 tells the kicked client it was removed (not just dropped),
+            # so it leaves instead of auto-rejoining. Close after the seat is
+            # gone so the state everyone sees already reflects the removal.
+            await connection_manager.close_seat(room.code, target, 4403)
         else:
             raise EngineError("UNKNOWN_MESSAGE", f"Unknown message type {msg_type!r}")
     except EngineError as e:

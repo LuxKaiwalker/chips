@@ -161,3 +161,55 @@ def test_bad_token_closes_4404_and_costs_lookup_budget(seated, monkeypatch):
         assert exc.value.code == 4404
     # The handshake itself cost 1, the failure another 5.
     assert len(limits.lookup._hits.get("testclient", [])) >= before + 5
+
+
+def test_binary_frame_is_a_clean_error_not_a_disconnect(seated):
+    # Regression: receive_text() raises on a binary frame, and that used to
+    # escape the loop and drop the socket with a bare 1006.
+    client, url, token = seated
+    with client.websocket_connect(url) as ws:
+        _authenticate(ws, token)
+        ws.send_bytes(b'{"type":"ping"}')
+        msg = ws.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "BAD_REQUEST"
+        # Socket survives and still works.
+        ws.send_text(json.dumps({"type": "ping"}))
+        assert ws.receive_json()["type"] == "pong"
+
+
+def test_host_kicks_a_player_and_their_socket_is_closed_4403():
+    # End-to-end: host, a second player joins and opens a socket; the host
+    # kicks them; the kicked socket closes 4403 and the seat is gone.
+    client = TestClient(app)
+    room = client.post("/api/rooms", json={"display_name": "Host"}).json()
+    code = room["room_code"]
+    guest = client.post(f"/api/rooms/{code}/join", json={"display_name": "Guest"}).json()
+
+    with client.websocket_connect(f"/ws/{code}") as host_ws:
+        _authenticate(host_ws, room["player_token"])
+        with client.websocket_connect(f"/ws/{code}") as guest_ws:
+            _authenticate(guest_ws, guest["player_token"])
+            # host sees the guest join broadcast
+            host_ws.receive_json()
+            host_ws.send_text(json.dumps({"type": "kick", "seat_id": guest["seat_id"]}))
+            with pytest.raises(WebSocketDisconnect) as exc:
+                while True:
+                    guest_ws.receive_json()
+            assert exc.value.code == 4403
+
+    # The seat is really gone, and the guest's token no longer resolves.
+    r = client.post(f"/api/rooms/{code}/rejoin", json={"player_token": guest["player_token"]})
+    assert r.status_code == 404
+
+
+def test_non_host_cannot_kick():
+    client = TestClient(app)
+    room = client.post("/api/rooms", json={"display_name": "Host"}).json()
+    code = room["room_code"]
+    guest = client.post(f"/api/rooms/{code}/join", json={"display_name": "Guest"}).json()
+    other = client.post(f"/api/rooms/{code}/join", json={"display_name": "Other"}).json()
+    with client.websocket_connect(f"/ws/{code}") as gws:
+        _authenticate(gws, guest["player_token"])
+        gws.send_text(json.dumps({"type": "kick", "seat_id": other["seat_id"]}))
+        msg = gws.receive_json()
+        assert msg["type"] == "error" and msg["code"] == "NOT_HOST"

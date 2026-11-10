@@ -46,7 +46,19 @@ export function Lobby({
                 {p.seat_id === room.host_seat_id && <span className="badge">HOST</span>}
                 {p.seat_id === mySeatId && <span className="badge">YOU</span>}
               </span>
-              <span className="muted">{p.stack} chips</span>
+              <span className="row" style={{ gap: '0.75rem', alignItems: 'center' }}>
+                <span className="muted">{p.stack} chips</span>
+                {isHost && p.seat_id !== room.host_seat_id && (
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      if (window.confirm(`Remove ${p.display_name} from the room?`)) send({ type: 'kick', seat_id: p.seat_id })
+                    }}
+                  >
+                    Kick
+                  </button>
+                )}
+              </span>
             </div>
           ))}
         </div>

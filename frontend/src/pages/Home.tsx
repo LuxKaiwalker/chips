@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ApiError, createRoom, joinRoom } from '../api/http'
+import { KICKED_FLAG } from '../api/ws'
 
 export function Home({
   onEnterRoom,
@@ -15,6 +16,18 @@ export function Home({
   const [startingStack, setStartingStack] = useState(200)
   const [rotateDealer, setRotateDealer] = useState(false)
   const [joinCode, setJoinCode] = useState(initialJoinCode ?? '')
+  // A kick reloads the page onto Home; surface why, once.
+  const [notice, setNotice] = useState<string | null>(() => {
+    try {
+      if (sessionStorage.getItem(KICKED_FLAG)) {
+        sessionStorage.removeItem(KICKED_FLAG)
+        return 'The host removed you from the room.'
+      }
+    } catch {
+      // sessionStorage unavailable; no banner, no harm.
+    }
+    return null
+  })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -56,6 +69,11 @@ export function Home({
   return (
     <div className="screen">
       <h1>Chips</h1>
+      {notice && (
+        <div className="error-banner" onClick={() => setNotice(null)}>
+          {notice}
+        </div>
+      )}
       <div className="card">
         <div className="row" style={{ marginBottom: '1rem' }}>
           <button className={`btn ${mode === 'create' ? 'btn-primary' : ''}`} style={{ flex: 1 }} onClick={() => setMode('create')}>

@@ -177,6 +177,31 @@ class RoomManager:
         del room.players[target_seat_id]
         room.touch()
 
+    def kick_seat(self, room: Room, requester_seat_id: int, target_seat_id: int) -> None:
+        """Host forcibly removes a player, connected or not.
+
+        Stronger than remove_stale_seat (no disconnect wait, works on a
+        connected player), but still only between hands -- removing a seat
+        mid-hand would corrupt the betting order and pot accounting. The
+        caller is responsible for closing the kicked player's socket so
+        their client reacts; this only mutates room state.
+
+        Note this is a *soft* kick: with no access control, a kicked player
+        who still knows the room code can immediately rejoin under a new
+        name. That's inherent to the open-access model (see SECURITY-AUDIT.md
+        H4), not a bug -- the host just has an eviction button, not a ban.
+        """
+        if requester_seat_id != room.host_seat_id:
+            raise EngineError("NOT_HOST", "Only the host can kick a player")
+        if target_seat_id == requester_seat_id:
+            raise EngineError("ILLEGAL_ACTION", "The host cannot kick themselves")
+        if room.phase == RoomPhase.IN_HAND:
+            raise EngineError("ILLEGAL_ACTION", "Cannot kick a player while a hand is in progress")
+        if target_seat_id not in room.players:
+            raise EngineError("PLAYER_NOT_FOUND", "No such seat")
+        del room.players[target_seat_id]
+        room.touch()
+
     def update_config(
         self,
         room: Room,

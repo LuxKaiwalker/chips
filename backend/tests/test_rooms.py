@@ -106,3 +106,54 @@ def test_remove_stale_seat_gating():
     with pytest.raises(EngineError) as exc:
         rm.remove_stale_seat(room, host.seat_id, carol.seat_id)
     assert exc.value.code == "ILLEGAL_ACTION"  # mid-hand
+
+
+def test_kick_seat_gating():
+    rm = RoomManager()
+    room, host = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0])
+    _, bob = rm.join_room(room.code, "Bob")
+
+    # non-host cannot kick
+    with pytest.raises(EngineError) as exc:
+        rm.kick_seat(room, bob.seat_id, host.seat_id)
+    assert exc.value.code == "NOT_HOST"
+
+    # host cannot kick themselves
+    with pytest.raises(EngineError) as exc:
+        rm.kick_seat(room, host.seat_id, host.seat_id)
+    assert exc.value.code == "ILLEGAL_ACTION"
+
+    # unknown seat
+    with pytest.raises(EngineError) as exc:
+        rm.kick_seat(room, host.seat_id, 999)
+    assert exc.value.code == "PLAYER_NOT_FOUND"
+
+    # unlike remove_stale_seat, a *connected* player can be kicked immediately
+    assert bob.connected is False or bob.connected is True  # default state irrelevant
+    bob.connected = True
+    rm.kick_seat(room, host.seat_id, bob.seat_id)
+    assert bob.seat_id not in room.players
+
+    # not allowed mid-hand
+    _, carol = rm.join_room(room.code, "Carol")
+    room.phase = RoomPhase.IN_HAND
+    with pytest.raises(EngineError) as exc:
+        rm.kick_seat(room, host.seat_id, carol.seat_id)
+    assert exc.value.code == "ILLEGAL_ACTION"
+
+
+def test_kicking_button_holder_does_not_soft_lock_start():
+    # With rotate_dealer on, current_dealer_seat points at the last hand's
+    # button. If that seat is kicked between hands, the dealer must fall back
+    # to the host so someone can still start the next hand.
+    from app.models import HandState, Street, current_dealer_seat
+
+    rm = RoomManager()
+    room, host = rm.create_room("Alice", 1, 2, 200, [0.5, 1.0], rotate_dealer=True)
+    _, bob = rm.join_room(room.code, "Bob")
+    room.hand = HandState(hand_number=1, button_seat=bob.seat_id, street=Street.PREFLOP)
+    room.phase = RoomPhase.BETWEEN_HANDS
+    assert current_dealer_seat(room) == bob.seat_id
+
+    rm.kick_seat(room, host.seat_id, bob.seat_id)
+    assert current_dealer_seat(room) == host.seat_id  # fell back, not stranded

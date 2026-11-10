@@ -110,16 +110,25 @@ function ActionLog({ log }: { log: string[] }) {
 }
 
 function HostAdminPanel({ room, send }: { room: RoomState; send: (payload: Record<string, unknown>) => void }) {
-  const staleSeats = room.players.filter((p) => !p.connected)
-  if (staleSeats.length === 0 || room.phase === 'in_hand') return null
+  // Kicking mid-hand would corrupt the betting order, so the panel only
+  // appears between hands (and in the lobby). Everyone but the host is
+  // kickable; the host leaves via "Leave Room".
+  const others = room.players.filter((p) => p.seat_id !== room.host_seat_id)
+  if (others.length === 0 || room.phase === 'in_hand') return null
   return (
     <div className="card">
-      <h3>Host: Remove a Seat</h3>
-      <p className="muted">Only works for seats disconnected long enough, and only between hands.</p>
+      <h3>Host: Manage Players</h3>
+      <p className="muted">Remove a player from the table (only between hands). They can rejoin if they still have the room code.</p>
       <div className="row wrap">
-        {staleSeats.map((p) => (
-          <button key={p.seat_id} className="btn" onClick={() => send({ type: 'remove_stale_seat', seat_id: p.seat_id })}>
-            Remove {p.display_name}
+        {others.map((p) => (
+          <button
+            key={p.seat_id}
+            className="btn"
+            onClick={() => {
+              if (window.confirm(`Remove ${p.display_name} from the room?`)) send({ type: 'kick', seat_id: p.seat_id })
+            }}
+          >
+            Kick {p.display_name}
           </button>
         ))}
       </div>

@@ -26,6 +26,22 @@ class ConnectionManager:
             except Exception:
                 pass
 
+    async def close_seat(self, room_code: str, seat_id: int, code: int) -> None:
+        """Close a specific seat's socket with a close code (e.g. a kick).
+
+        The target's own room_socket coroutine, blocked on receive(), then
+        sees the disconnect and runs its normal teardown; this just delivers
+        the code so the client can tell a kick apart from an ordinary drop.
+        """
+        ws = self._connections.get(room_code, {}).get(seat_id)
+        if ws is None:
+            return
+        try:
+            await ws.close(code=code)
+        except Exception:
+            pass
+        self._connections.get(room_code, {}).pop(seat_id, None)
+
     async def send_error(self, room_code: str, seat_id: int, code: str, message: str) -> None:
         ws = self._connections.get(room_code, {}).get(seat_id)
         if ws is None:
