@@ -1,10 +1,34 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from app import limits
 from app.config import settings
 from app.engine import EngineError
 from app.rate_limit import KeyedLimiter, client_ip
 from app.rooms import room_manager
+
+
+# Typed request bodies rather than `body: dict = Body(...)`. The dicts meant
+# a missing or wrong-typed field surfaced as an unhandled KeyError/
+# ValueError/AttributeError -- an HTTP 500 with a traceback in the log for
+# what is really a client mistake. These turn the same input into a 422.
+# The engine-level checks in rooms.py stay as the authoritative ones: the
+# WebSocket path has no pydantic in front of it.
+class CreateRoomBody(BaseModel):
+    display_name: str
+    small_blind: int = settings.default_small_blind
+    big_blind: int = settings.default_big_blind
+    starting_stack: int = settings.default_starting_stack
+    raise_presets: list[float] = Field(default_factory=lambda: list(settings.default_raise_presets))
+    rotate_dealer: bool = False
+
+
+class JoinRoomBody(BaseModel):
+    display_name: str
+
+
+class RejoinRoomBody(BaseModel):
+    player_token: str
 
 
 def _enforce(limiter: KeyedLimiter, detail: str):
@@ -45,17 +69,17 @@ async def health():
 
 @router.post("/rooms")
 async def create_room(
-    body: dict = Body(...),
+    body: CreateRoomBody,
     _rl: None = Depends(_create_dep),
 ):
     try:
         room, player = room_manager.create_room(
-            display_name=body["display_name"],
-            small_blind=int(body.get("small_blind", settings.default_small_blind)),
-            big_blind=int(body.get("big_blind", settings.default_big_blind)),
-            starting_stack=int(body.get("starting_stack", settings.default_starting_stack)),
-            raise_presets=list(body.get("raise_presets", settings.default_raise_presets)),
-            rotate_dealer=bool(body.get("rotate_dealer", False)),
+            display_name=body.display_name,
+            small_blind=body.small_blind,
+            big_blind=body.big_blind,
+            starting_stack=body.starting_stack,
+            raise_presets=body.raise_presets,
+            rotate_dealer=body.rotate_dealer,
         )
     except EngineError as e:
         return _engine_error_response(e)
@@ -66,11 +90,11 @@ async def create_room(
 async def join_room(
     code: str,
     request: Request,
-    body: dict = Body(...),
+    body: JoinRoomBody,
     _rl: None = Depends(_join_dep),
 ):
     try:
-        room, player = room_manager.join_room(code, display_name=body["display_name"])
+        room, player = room_manager.join_room(code, display_name=body.display_name)
     except EngineError as e:
         _penalize_failed_lookup(limits.join, request, e)
         return _engine_error_response(e)
@@ -81,11 +105,11 @@ async def join_room(
 async def rejoin_room(
     code: str,
     request: Request,
-    body: dict = Body(...),
+    body: RejoinRoomBody,
     _rl: None = Depends(_lookup_dep),
 ):
     try:
-        room, player = room_manager.rejoin_room(code, player_token=body["player_token"])
+        room, player = room_manager.rejoin_room(code, player_token=body.player_token)
     except EngineError as e:
         _penalize_failed_lookup(limits.lookup, request, e)
         return _engine_error_response(e)

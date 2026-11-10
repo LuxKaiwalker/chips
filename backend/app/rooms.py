@@ -1,3 +1,4 @@
+import math
 import secrets
 import time
 
@@ -13,6 +14,41 @@ def _validate_name(display_name: str) -> str:
     if len(display_name) > 24:
         raise EngineError("INVALID_NAME", "Name is too long (max 24 characters)")
     return display_name
+
+
+def _validate_config(small_blind: int, big_blind: int, starting_stack: int, raise_presets) -> list[float]:
+    """Bound the room's money settings.
+
+    Not cosmetic validation: _post_blind does `actual = min(amount,
+    player.stack); player.stack -= actual`, so a *negative* blind increases
+    the poster's stack -- unvalidated config was a chip-minting path. A
+    non-positive big blind also seeds last_full_raise_increment, which
+    corrupts every min-raise computation for the rest of the hand.
+    """
+    for name, value in (("small_blind", small_blind), ("big_blind", big_blind), ("starting_stack", starting_stack)):
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise EngineError("INVALID_CONFIG", f"{name} must be a positive whole number")
+        if value > 10_000_000:
+            raise EngineError("INVALID_CONFIG", f"{name} is implausibly large")
+    if big_blind < small_blind:
+        raise EngineError("INVALID_CONFIG", "big_blind cannot be smaller than small_blind")
+    if starting_stack < big_blind:
+        raise EngineError("INVALID_CONFIG", "starting_stack must cover at least one big blind")
+
+    # Presets are echoed back to every client and multiplied into bet sizes
+    # client-side, so a non-numeric or absurd entry breaks everyone's action
+    # panel rather than just the sender's.
+    if not isinstance(raise_presets, list) or not 1 <= len(raise_presets) <= 8:
+        raise EngineError("INVALID_CONFIG", "raise_presets must be a list of 1-8 fractions")
+    cleaned: list[float] = []
+    for preset in raise_presets:
+        if isinstance(preset, bool) or not isinstance(preset, (int, float)):
+            raise EngineError("INVALID_CONFIG", "raise_presets must all be numbers")
+        preset = float(preset)
+        if not math.isfinite(preset) or not 0 < preset <= 10:
+            raise EngineError("INVALID_CONFIG", "each raise preset must be between 0 and 10")
+        cleaned.append(preset)
+    return cleaned
 
 
 def _validate_code(code: str) -> str:
@@ -57,6 +93,7 @@ class RoomManager:
         if len(self.rooms) >= settings.max_rooms:
             raise EngineError("SERVER_AT_CAPACITY", "Too many rooms on this server right now, try again shortly")
         display_name = _validate_name(display_name)
+        raise_presets = _validate_config(small_blind, big_blind, starting_stack, raise_presets)
         code = self._generate_code()
         config = RoomConfig(
             small_blind=small_blind,
@@ -154,6 +191,7 @@ class RoomManager:
             raise EngineError("NOT_HOST", "Only the host can edit room configuration")
         if room.phase != RoomPhase.LOBBY:
             raise EngineError("ILLEGAL_ACTION", "Configuration can only change before the first hand")
+        raise_presets = _validate_config(small_blind, big_blind, starting_stack, raise_presets)
         room.config.small_blind = small_blind
         room.config.big_blind = big_blind
         room.config.starting_stack = starting_stack

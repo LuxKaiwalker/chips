@@ -1,3 +1,4 @@
+import math
 import time
 
 from app.engine import EngineError
@@ -109,6 +110,36 @@ def start_new_hand(room: Room) -> None:
     room.touch()
 
 
+def _coerce_chip_amount(amount) -> int:
+    """Normalize a client-supplied chip amount to a plain int, or reject it.
+
+    This guards the one hole big enough to destroy a room. JSON permits the
+    bare literals NaN and Infinity and Python's json.loads accepts them, and
+    the bound check below is a pair of comparisons: min(nan, max_to) is nan
+    and `nan < min_to` is False, so a NaN amount passes validation
+    untouched. It then propagates into player.stack, contrib_street,
+    contrib_hand and every pot sum, and the resulting broadcast serializes
+    as bare `NaN`, which JSON.parse rejects -- permanently breaking every
+    client in the room, with no recovery since state is in memory.
+
+    Floats that happen to be integral (10.0) are accepted and narrowed;
+    anything fractional is rejected rather than silently truncated, since a
+    fractional stack is not a thing this app can represent. bool is
+    rejected explicitly because it is an int subclass in Python.
+    """
+    if isinstance(amount, bool):
+        raise EngineError("INVALID_AMOUNT", "Amount must be a number")
+    if isinstance(amount, int):
+        return amount
+    if isinstance(amount, float):
+        if not math.isfinite(amount):
+            raise EngineError("INVALID_AMOUNT", "Amount must be a finite number")
+        if not amount.is_integer():
+            raise EngineError("INVALID_AMOUNT", "Amount must be a whole number of chips")
+        return int(amount)
+    raise EngineError("INVALID_AMOUNT", "Amount must be a number")
+
+
 def _post_blind(player: Player, amount: int) -> None:
     actual = min(amount, player.stack)
     player.stack -= actual
@@ -160,6 +191,7 @@ def apply_action(room: Room, seat_id: int, action: str, amount: int | None = Non
             raise EngineError("ILLEGAL_ACTION", "You cannot bet or raise")
         if amount is None:
             raise EngineError("INVALID_AMOUNT", "An amount is required")
+        amount = _coerce_chip_amount(amount)
         min_to, max_to = legal["min_to"], legal["max_to"]
         to_amount = min(amount, max_to)
         if to_amount < min_to:
@@ -362,6 +394,7 @@ def declare_winners(room: Room, seat_id: int, assignments: list[dict]) -> None:
 
 
 def rebuy(room: Room, seat_id: int, amount: int) -> None:
+    amount = _coerce_chip_amount(amount)
     if amount <= 0:
         raise EngineError("INVALID_AMOUNT", "Rebuy amount must be positive")
     player = room.players[seat_id]

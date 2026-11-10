@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import socket
 import subprocess
@@ -67,10 +68,14 @@ def throttled_server():
     proc.wait(timeout=5)
 
 
-def _close_code(port: int, query: str) -> int | None:
+def _close_code(port: int, room: str = "000000", first_frame: str | None = None) -> int | None:
+    """Connect, optionally send one frame, and report the close code."""
+
     async def connect():
         try:
-            async with websockets.connect(f"ws://127.0.0.1:{port}/ws/NOPE?{query}") as ws:
+            async with websockets.connect(f"ws://127.0.0.1:{port}/ws/{room}") as ws:
+                if first_frame is not None:
+                    await ws.send(first_frame)
                 await ws.recv()
         except websockets.exceptions.ConnectionClosed as e:
             return e.code
@@ -80,11 +85,16 @@ def _close_code(port: int, query: str) -> int | None:
 
 
 def test_unknown_room_delivers_4404(live_server):
-    assert _close_code(live_server, "player_token=nope") == 4404
+    auth = json.dumps({"type": "auth", "player_token": "nope"})
+    assert _close_code(live_server, first_frame=auth) == 4404
+
+
+def test_bad_first_frame_delivers_4401(live_server):
+    assert _close_code(live_server, first_frame=json.dumps({"type": "ping"})) == 4401
 
 
 def test_connect_flood_delivers_4429(throttled_server):
     # The accept-before-close dance is what makes this reach the client at
     # all; without it uvicorn would send a bare HTTP 403 and the browser's
-    # onclose would never see 4429.
-    assert _close_code(throttled_server, "player_token=nope") == 4429
+    # onclose would never see 4429. Rejected before any frame is sent.
+    assert _close_code(throttled_server) == 4429

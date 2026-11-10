@@ -1,11 +1,14 @@
 import { API_BASE, clearLastRoomCode, getPlayerToken } from './http'
 
-// Matches ws_router.py's close codes: 4404 = room or player not found
-// (e.g. a stale room after a backend restart, which wipes all in-memory
-// rooms), not worth retrying with the same player token -- see the onclose
-// handler below. 4429 = rate limited, which *is* worth retrying, just much
-// later; the close `reason` carries the server's retry hint in seconds (a
-// WebSocket close has no headers, so that's the only channel for it).
+// Matches ws_router.py's close codes. 4401 = no usable auth frame arrived
+// (a client bug or a dropped first message -- an ordinary retry is right).
+// 4404 = room or player not found (e.g. a stale room after a backend
+// restart, which wipes all in-memory rooms), not worth retrying with the
+// same player token -- see the onclose handler below. 4429 = rate limited,
+// which *is* worth retrying, just much later; the close `reason` carries
+// the server's retry hint in seconds (a WebSocket close has no headers, so
+// that's the only channel for it).
+const CLOSE_UNAUTHENTICATED = 4401
 const CLOSE_ROOM_NOT_FOUND = 4404
 const CLOSE_RATE_LIMITED = 4429
 
@@ -54,11 +57,19 @@ export class RoomSocket {
     } else {
       wsOrigin = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
     }
-    const url = `${wsOrigin}/ws/${this.roomCode}?player_token=${encodeURIComponent(playerToken ?? '')}`
+    // The player token is NOT in this URL on purpose. uvicorn logs the full
+    // request path including the query string for every WebSocket connect,
+    // so a token here ends up in the server's log in cleartext -- and it is
+    // the whole credential for a seat, with no expiry and no revocation.
+    // It goes in the first message instead (see the auth frame below).
+    const url = `${wsOrigin}/ws/${this.roomCode}`
     const ws = new WebSocket(url)
     this.ws = ws
 
     ws.onopen = () => {
+      // Must be the very first frame; the server drops the socket with 4401
+      // if it doesn't arrive promptly.
+      ws.send(JSON.stringify({ type: 'auth', player_token: playerToken ?? '' }))
       this.reconnectDelay = RECONNECT_BASE_MS
       this.onNotice(null)
       this.onConnectionChange(true)
@@ -86,6 +97,11 @@ export class RoomSocket {
       this.onConnectionChange(false)
       if (this.heartbeat) window.clearInterval(this.heartbeat)
 
+      if (ev.code === CLOSE_UNAUTHENTICATED) {
+        // The auth frame never landed. The token itself is probably fine,
+        // so just retry rather than tearing down stored state.
+        this.onNotice('Connection handshake failed — retrying.')
+      }
       if (ev.code === CLOSE_ROOM_NOT_FOUND) {
         // The room itself (or this player's seat) is gone -- the backend
         // restarted and its in-memory rooms went with it. Drop back to Home

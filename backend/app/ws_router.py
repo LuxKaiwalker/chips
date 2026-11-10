@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 
@@ -27,9 +28,18 @@ router = APIRouter()
 # unbounded IP-keyed dict.
 _ws_conns_by_ip: dict[str, int] = {}
 
+# How long an accepted-but-unauthenticated socket may sit before being
+# dropped. It already occupies a slot in _ws_conns_by_ip, so letting it idle
+# forever would be a cheap way to exhaust the per-IP connection budget.
+_AUTH_TIMEOUT_SECONDS = 10
+
+
+class _AuthFrameError(Exception):
+    """No usable auth frame arrived (missing, malformed, oversized, late)."""
+
 
 @router.websocket("/ws/{room_code}")
-async def room_socket(ws: WebSocket, room_code: str, player_token: str = ""):
+async def room_socket(ws: WebSocket, room_code: str):
     # Uvicorn's websockets protocol implementation hardcodes a plain HTTP
     # 403 (discarding whatever custom `code` is passed) if the app calls
     # ws.close() *before* ws.accept() -- confirmed by reading
@@ -55,76 +65,36 @@ async def room_socket(ws: WebSocket, room_code: str, player_token: str = ""):
         await _reject(ws, 4429, limits.lookup.retry_after(ip))
         return
 
-    try:
-        room, player = room_manager.rejoin_room(room_code, player_token)
-    except EngineError:
-        limits.lookup.penalize(ip, settings.failed_lookup_penalty)
-        await ws.accept()
-        await ws.close(code=4404)
-        return
-
     await ws.accept()
     _ws_conns_by_ip[ip] = _ws_conns_by_ip.get(ip, 0) + 1
-    player.connected = True
-    player.disconnected_at = None
-    connection_manager.connect(room.code, player.seat_id, ws)
-    await connection_manager.broadcast_state(room)
-
-    # Keyed by seat, not by connection: ConnectionManager keys its socket
-    # table by seat_id, so several sockets bearing the same player_token
-    # collapse to one entry and the broadcast fan-out is bounded by distinct
-    # seats. A per-connection limiter would let one token multiply its budget
-    # by opening many sockets, which is the abuse this is here to stop.
-    msg_key = limits.message_key(room.code, player.seat_id)
-
+    room = None
+    player = None
     try:
-        while True:
-            # receive_text() rather than receive_json() so the cheap checks
-            # below run *before* paying for a parse, and so a non-JSON frame
-            # is an error message rather than an unhandled JSONDecodeError
-            # that tears the connection down.
-            raw = await ws.receive_text()
+        # The player token arrives in the first message, NOT the query
+        # string. It used to be a query parameter, which meant uvicorn wrote
+        # it to the access log in cleartext on every connect, rejection and
+        # close (it logs the full path with query string, and prod runs at
+        # --log-level info). That token is the entire credential for a seat,
+        # never expires and cannot be revoked, so anyone who could read the
+        # journal could take over any seat.
+        try:
+            token = await _read_auth_frame(ws)
+        except _AuthFrameError:
+            await ws.close(code=4401)
+            return
 
-            if not limits.ws_message_hard.allow(msg_key):
-                await ws.close(code=4429, reason=str(limits.ws_message_hard.retry_after(msg_key)))
-                break
+        try:
+            room, player = room_manager.rejoin_room(room_code, token)
+        except EngineError:
+            limits.lookup.penalize(ip, settings.failed_lookup_penalty)
+            await ws.close(code=4404)
+            return
 
-            if len(raw) > settings.ws_max_message_bytes:
-                await connection_manager.send_error(
-                    room.code, player.seat_id, "MESSAGE_TOO_LARGE", "That message was too large"
-                )
-                continue
-
-            # Soft breach drops the message instead of closing: a player
-            # double-tapping an action button must not lose their socket
-            # mid-hand. The error reply is 1:1 with what was sent, so it
-            # amplifies nothing, and the hard tier above handles a client
-            # that ignores it. The ping branch sits *below* this check
-            # deliberately -- exempting pings would hand over a free flood
-            # that still costs a parse and a send.
-            if not limits.ws_message.allow(msg_key):
-                await connection_manager.send_error(
-                    room.code, player.seat_id, "RATE_LIMITED", "Slow down — too many actions at once"
-                )
-                continue
-
-            try:
-                msg = json.loads(raw)
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                await connection_manager.send_error(
-                    room.code, player.seat_id, "BAD_REQUEST", "Malformed message"
-                )
-                continue
-            if not isinstance(msg, dict):
-                await connection_manager.send_error(
-                    room.code, player.seat_id, "BAD_REQUEST", "Malformed message"
-                )
-                continue
-
-            if msg.get("type") == "ping":
-                await ws.send_json({"type": "pong"})
-                continue
-            await _handle_message(room, player.seat_id, msg)
+        player.connected = True
+        player.disconnected_at = None
+        connection_manager.connect(room.code, player.seat_id, ws)
+        await connection_manager.broadcast_state(room)
+        await _receive_loop(ws, room, player.seat_id)
     except WebSocketDisconnect:
         pass
     finally:
@@ -133,10 +103,85 @@ async def room_socket(ws: WebSocket, room_code: str, player_token: str = ""):
             _ws_conns_by_ip[ip] = remaining
         else:
             _ws_conns_by_ip.pop(ip, None)
-        player.connected = False
-        player.disconnected_at = time.time()
-        connection_manager.disconnect(room.code, player.seat_id)
-        await connection_manager.broadcast_state(room)
+        # Only if we got far enough to attach to a seat; an unauthenticated
+        # socket has no player state to tear down.
+        if room is not None and player is not None:
+            player.connected = False
+            player.disconnected_at = time.time()
+            connection_manager.disconnect(room.code, player.seat_id)
+            await connection_manager.broadcast_state(room)
+
+
+async def _read_auth_frame(ws: WebSocket) -> str:
+    try:
+        raw = await asyncio.wait_for(ws.receive_text(), timeout=_AUTH_TIMEOUT_SECONDS)
+    except (TimeoutError, asyncio.TimeoutError) as e:
+        raise _AuthFrameError from e
+    if len(raw) > settings.ws_max_message_bytes:
+        raise _AuthFrameError
+    try:
+        msg = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise _AuthFrameError from e
+    if not isinstance(msg, dict) or msg.get("type") != "auth":
+        raise _AuthFrameError
+    token = msg.get("player_token")
+    if not isinstance(token, str):
+        raise _AuthFrameError
+    return token
+
+
+async def _receive_loop(ws: WebSocket, room, seat_id: int) -> None:
+    # Keyed by seat, not by connection: ConnectionManager keys its socket
+    # table by seat_id, so several sockets bearing the same player_token
+    # collapse to one entry and the broadcast fan-out is bounded by distinct
+    # seats. A per-connection limiter would let one token multiply its budget
+    # by opening many sockets, which is the abuse this is here to stop.
+    msg_key = limits.message_key(room.code, seat_id)
+
+    while True:
+        # receive_text() rather than receive_json() so the cheap checks
+        # below run *before* paying for a parse, and so a non-JSON frame
+        # is an error message rather than an unhandled JSONDecodeError
+        # that tears the connection down.
+        raw = await ws.receive_text()
+
+        if not limits.ws_message_hard.allow(msg_key):
+            await ws.close(code=4429, reason=str(limits.ws_message_hard.retry_after(msg_key)))
+            return
+
+        if len(raw) > settings.ws_max_message_bytes:
+            await connection_manager.send_error(
+                room.code, seat_id, "MESSAGE_TOO_LARGE", "That message was too large"
+            )
+            continue
+
+        # Soft breach drops the message instead of closing: a player
+        # double-tapping an action button must not lose their socket
+        # mid-hand. The error reply is 1:1 with what was sent, so it
+        # amplifies nothing, and the hard tier above handles a client
+        # that ignores it. The ping branch sits *below* this check
+        # deliberately -- exempting pings would hand over a free flood
+        # that still costs a parse and a send.
+        if not limits.ws_message.allow(msg_key):
+            await connection_manager.send_error(
+                room.code, seat_id, "RATE_LIMITED", "Slow down — too many actions at once"
+            )
+            continue
+
+        try:
+            msg = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            await connection_manager.send_error(room.code, seat_id, "BAD_REQUEST", "Malformed message")
+            continue
+        if not isinstance(msg, dict):
+            await connection_manager.send_error(room.code, seat_id, "BAD_REQUEST", "Malformed message")
+            continue
+
+        if msg.get("type") == "ping":
+            await ws.send_json({"type": "pong"})
+            continue
+        await _handle_message(room, seat_id, msg)
 
 
 async def _reject(ws: WebSocket, code: int, retry_after: int) -> None:
