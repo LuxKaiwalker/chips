@@ -253,8 +253,9 @@ async def _handle_message(room, seat_id: int, msg: dict) -> None:
     except EngineError as e:
         await connection_manager.send_error(room.code, seat_id, e.code, e.message)
         return
-    except (KeyError, ValueError, TypeError, AttributeError) as e:
-        await connection_manager.send_error(room.code, seat_id, "BAD_REQUEST", str(e))
+    except (KeyError, ValueError, TypeError, AttributeError):
+        # A fixed string: str(e) would echo Python internals to the client.
+        await connection_manager.send_error(room.code, seat_id, "BAD_REQUEST", "Malformed message")
         return
 
     await connection_manager.broadcast_state(room)

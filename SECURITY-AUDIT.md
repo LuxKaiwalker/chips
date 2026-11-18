@@ -24,11 +24,11 @@ dependencies): 0 vulnerabilities.
 | M2 | Medium | Raw dict bodies produce unhandled 500s | **Fixed** |
 | M3 | Medium | `AttributeError` escapes the WS handler and kills the connection | **Fixed** |
 | M4 | Medium | Oversized WS frames force a 16 MiB JSON parse | **Fixed** |
-| M5 | Medium | Spectators can advance the street | Open |
-| M6 | Medium | Self-service rebuy is uncapped | Open |
+| M5 | Medium | Spectators can advance the street | **Fixed** |
+| M6 | Medium | Self-service rebuy is uncapped | **Fixed** |
 | M7 | Medium | No security headers | Open |
-| M8 | Medium | Raw exception text echoed to clients | Open |
-| L1–L8 | Low | See below | Open |
+| M8 | Medium | Raw exception text echoed to clients | **Fixed** |
+| L1–L8 | Low | See below | L1 fixed, rest open |
 
 ---
 
@@ -206,20 +206,28 @@ both entry points, plus `WS_MAX_MESSAGE_BYTES` (8192) checked on the raw text
 before parsing. The same restructure fixed an unhandled `JSONDecodeError`
 that let a non-JSON text frame tear the connection down.
 
-### M5. Spectators can advance the street — *open*
+### M5. Spectators can advance the street — *fixed*
 
 `advance_runout` only excludes `FOLDED`, so a `SITTING_OUT` or `BUSTED` seat
 can advance the street for everyone. Notably weaker than its siblings:
 `declare_winners` was deliberately tightened to a single arbiter.
 Suggested fix: require the seat to be in `hand.dealt_in_seats`.
 
-### M6. Self-service rebuy is uncapped — *open*
+Fixed (2026-11-18): `advance_runout` now requires the seat to be dealt in
+and not folded, and the client only offers the button to active and all-in
+players. Regression: `test_spectator_cannot_advance_the_runout`.
+
+### M6. Self-service rebuy is uncapped — *fixed*
 
 `rebuy` accepts any positive amount for a busted player, so anyone at the
 table can mint an arbitrary stack. The README calls this trust-based by
 design, which is defensible at a real table but less so now that the table is
 open to anyone with the code. Suggested fix: cap at some multiple of
 `starting_stack`.
+
+Fixed (2026-11-18): capped at `starting_stack`, the same buy-in everyone sat
+down with; the rebuy form enforces the same bound. Regression:
+`test_rebuy_is_capped_at_the_starting_stack`.
 
 ### M7. No security headers — *open*
 
@@ -231,19 +239,22 @@ Nothing sets `Content-Security-Policy`, `Strict-Transport-Security`,
 because it is untestable without a live nginx (which isn't installed here, so
 `nginx -t` has not been run against the modified config either).
 
-### M8. Raw exception text echoed to clients — *open*
+### M8. Raw exception text echoed to clients — *fixed*
 
 `_handle_message` sends `str(e)` to the client as `BAD_REQUEST`, which can
 surface Python internals. Low impact given there is nothing secret in the
 process, but it is free to replace with a fixed string.
 
-## Low / informational — all open
+Fixed (2026-11-18): the handler now sends a fixed `Malformed message`.
+
+## Low / informational — L1 fixed, the rest open
 
 - **L1.** `DEPLOYMENT.md` commits the real Cloudflare tunnel UUID
   (`815ad8c7-…`) in a tracked file, twice. Not a credential — the JSON
   credentials file is — but it fingerprints the host and a sibling
   deployment, and the rest of `deploy/` is carefully templated with
-  placeholders. Replace with `<TUNNEL_ID>` for consistency.
+  placeholders. Replace with `<TUNNEL_ID>` for consistency. *Fixed
+  2026-11-18.*
 - **L2.** `.github/workflows/pages.yml` pins actions to mutable major tags
   (`actions/checkout@v4`) rather than commit SHAs.
 - **L3.** No `Origin` check on the WebSocket endpoint. CORS does not apply to

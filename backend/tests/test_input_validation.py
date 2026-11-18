@@ -1,7 +1,8 @@
 """Regressions for the input-validation holes found in the security audit.
 
-See SECURITY-AUDIT.md findings C1 (NaN/float bet amounts) and M1
-(unvalidated room config minting chips).
+See SECURITY-AUDIT.md findings C1 (NaN/float bet amounts), M1
+(unvalidated room config minting chips), M5 (spectators advancing the
+runout) and M6 (uncapped self-service rebuy).
 """
 
 import json
@@ -11,8 +12,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.engine import EngineError
-from app.engine.state_machine import apply_action, rebuy, start_new_hand
+from app.engine.state_machine import advance_runout, apply_action, rebuy, start_new_hand
 from app.main import app
+from app.models import Player, PlayerStatus, Street
 from tests.helpers import make_room
 
 
@@ -144,3 +146,45 @@ def test_non_ascii_player_token_does_not_500():
     client = TestClient(app)
     r = client.post("/api/rooms/000000/rejoin", json={"player_token": "tøken-ünicode"})
     assert r.status_code == 404
+
+
+# --- M6: self-service rebuy is capped at the starting stack -----------------
+
+
+def test_rebuy_is_capped_at_the_starting_stack():
+    room = make_room({1: 100, 2: 100})
+    room.players[1].stack = 0
+    cap = room.config.starting_stack
+    with pytest.raises(EngineError) as exc:
+        rebuy(room, 1, cap + 1)
+    assert exc.value.code == "INVALID_AMOUNT"
+    assert room.players[1].stack == 0
+    rebuy(room, 1, cap)
+    assert room.players[1].stack == cap
+
+
+# --- M5: spectators cannot advance the runout --------------------------------
+
+
+def _room_awaiting_runout_with_spectator():
+    room = make_room({1: 50, 2: 20, 3: 100})
+    start_new_hand(room)
+    apply_action(room, 1, "raise", 50)
+    apply_action(room, 2, "call")
+    apply_action(room, 3, "call")
+    assert room.hand.awaiting_runout_confirmation is True
+    # A seat that joined mid-hand: present in the room, not dealt in.
+    room.players[4] = Player(
+        seat_id=4, display_name="P4", stack=100, status=PlayerStatus.SITTING_OUT, player_token="tok4"
+    )
+    return room
+
+
+def test_spectator_cannot_advance_the_runout():
+    room = _room_awaiting_runout_with_spectator()
+    with pytest.raises(EngineError) as exc:
+        advance_runout(room, 4)
+    assert exc.value.code == "ILLEGAL_ACTION"
+    assert room.hand.street == Street.FLOP
+    advance_runout(room, 3)
+    assert room.hand.street == Street.TURN

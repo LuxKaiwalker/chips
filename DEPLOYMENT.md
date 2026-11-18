@@ -80,7 +80,7 @@ domain or DNS zone setup is needed, just the two records/settings below.
 
 **This machine already runs nginx and Cloudflare Tunnel for `membase`, both
 declared in `/etc/nixos/configuration.nix` (`services.nginx.virtualHosts`
-and `services.cloudflared.tunnels."815ad8c7-1554-416e-a2f2-15a9f27bd98e"`).
+and `services.cloudflared.tunnels."<TUNNEL_ID>"`).
 Chips reuses that exact same tunnel and nginx instance instead of standing
 up a second one -- no new `cloudflared tunnel create`, no new login.**
 

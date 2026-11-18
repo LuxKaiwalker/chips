@@ -122,7 +122,8 @@ room lifetime (`cleanup.py` sweeps empty rooms after 10 minutes) and the
    arbiter rather than any player, the same way a real dealer pushes the
    chips — including when they folded their own hand.
 6. A player who busts to 0 chips can rebuy between hands, self-declared,
-   same as buying more chips from the rack in a real game.
+   same as buying more chips from the rack in a real game, for up to the
+   starting stack.
 
 The host (seat 1, whoever created the room) can edit blinds/stack before
 the first hand, and remove a seat that's been disconnected for 5+ minutes
@@ -139,3 +140,7 @@ hand.
 
 Tournament mode / increasing blinds is not implemented. `RoomConfig` has a
 `blind_schedule` field reserved for it.
+
+## License
+
+[MIT](LICENSE).

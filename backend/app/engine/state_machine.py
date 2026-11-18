@@ -265,8 +265,10 @@ def advance_runout(room: Room, seat_id: int) -> None:
         raise EngineError("NO_HAND_IN_PROGRESS", "No hand is currently in progress")
     if not hand.awaiting_runout_confirmation:
         raise EngineError("ILLEGAL_ACTION", "Not awaiting a runout confirmation")
-    if room.players[seat_id].status == PlayerStatus.FOLDED:
-        raise EngineError("ILLEGAL_ACTION", "Folded players cannot advance the runout")
+    # Only someone still in the hand confirms the deal: not a folded seat,
+    # and not a spectator (sitting out, busted, or joined mid-hand).
+    if seat_id not in hand.dealt_in_seats or room.players[seat_id].status == PlayerStatus.FOLDED:
+        raise EngineError("ILLEGAL_ACTION", "Only players still in the hand can advance the runout")
 
     hand.awaiting_runout_confirmation = False
     if hand.street == Street.RIVER:
@@ -397,6 +399,13 @@ def rebuy(room: Room, seat_id: int, amount: int) -> None:
     amount = _coerce_chip_amount(amount)
     if amount <= 0:
         raise EngineError("INVALID_AMOUNT", "Rebuy amount must be positive")
+    # Capped at the starting stack, the same buy-in everyone sat down with:
+    # rebuying is self-service, so without a cap anyone with the room code
+    # could mint an arbitrary stack.
+    if amount > room.config.starting_stack:
+        raise EngineError(
+            "INVALID_AMOUNT", f"Rebuy is capped at the starting stack ({room.config.starting_stack})"
+        )
     player = room.players[seat_id]
     if player.stack != 0:
         raise EngineError("ILLEGAL_ACTION", "Can only rebuy when your stack is 0")

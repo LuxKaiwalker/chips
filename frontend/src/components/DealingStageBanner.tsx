@@ -11,6 +11,9 @@ export function DealingStageBanner({
   onAdvance: () => void
 }) {
   const revealed = STREET_CARD_COUNT[hand.street]
+  // Only a player still in the hand confirms the deal; the server rejects
+  // anyone folded, sitting out or busted.
+  const canAdvance = myStatus === 'active' || myStatus === 'all_in'
 
   return (
     <div className="stage-banner" key={hand.street}>
@@ -20,12 +23,12 @@ export function DealingStageBanner({
         ))}
       </div>
       <div className="stage-label">{STREET_DEAL_LABEL[hand.street]}</div>
-      {hand.awaiting_runout_confirmation && myStatus !== 'folded' && (
+      {hand.awaiting_runout_confirmation && canAdvance && (
         <button className="btn btn-primary" style={{ marginTop: '0.5rem' }} onClick={onAdvance}>
           Dealt — continue
         </button>
       )}
-      {hand.awaiting_runout_confirmation && myStatus === 'folded' && (
+      {hand.awaiting_runout_confirmation && !canAdvance && (
         <p className="muted">Waiting for another player to confirm the deal…</p>
       )}
     </div>
